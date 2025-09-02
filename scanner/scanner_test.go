@@ -83,7 +83,10 @@ func TestScanner_Start(t *testing.T) {
 		}
 	}() // Create and start scanner
 	s := NewTestScanner("localhost", port)
-	s.Start()
+	err = s.Start()
+	if err != nil {
+		t.Fatalf("Failed to start scanner: %v", err)
+	}
 
 	// Verify that scanner captured certificate details
 	if s.EntityCertificate == nil {
