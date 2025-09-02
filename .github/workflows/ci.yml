@@ -25,9 +25,9 @@ jobs:
       with:
         go-version-file: "go.mod"
         cache: true
-        
+
     - name: Install golangci-lint
-      uses: golangci/golangci-lint-action@v4
+      uses: golangci/golangci-lint-action@v8
       with:
         version: latest
         
