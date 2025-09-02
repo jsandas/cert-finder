@@ -63,7 +63,7 @@ func (s *Scanner) Start() error {
 	// Configure TLS
 	tlsConfig := &tls.Config{
 		ServerName:         s.Host,
-		InsecureSkipVerify: true, // We are only interested in fetching certificates
+		InsecureSkipVerify: true, // #nosec G402 We are only interested in fetching certificates
 		NextProtos:         []string{"http/1.1", "h2"},
 		CipherSuites:       ftls.DefaultCipherSuites, // use all cipher suites supported by Go
 	}
