@@ -49,7 +49,7 @@ func (s *Scanner) Start() error {
 	// Connect to server
 	conn, err := net.Dial("tcp", net.JoinHostPort(s.Host, s.Port))
 	if err != nil {
-		return fmt.Errorf("Failed to connect: %v", err)
+		return fmt.Errorf("failed to connect: %v", err)
 	}
 	defer conn.Close()
 
