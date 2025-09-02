@@ -9,7 +9,11 @@ import (
 func main() {
 
 	test := scanner.NewScanner("smtp.gmail.com", "587")
-	test.Start()
+	err := test.Start()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
 
 	fmt.Printf("Protocol Version: %s\n", test.Version)
 	fmt.Printf("Cipher Suite: %s\n", test.Cipher)
