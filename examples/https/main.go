@@ -6,8 +6,6 @@ import (
 	"github.com/jsandas/cert-finder/scanner"
 )
 
-const ()
-
 func main() {
 
 	test := scanner.NewScanner("www.google.com", "443")
