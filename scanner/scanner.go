@@ -55,7 +55,8 @@ func (s *Scanner) Start() error {
 
 	// Perform STARTTLS handshake if not skipped
 	if !s.skipStartTLS {
-		if err := starttls.StartTLS(ctx, conn, s.Port); err != nil {
+		err := starttls.StartTLS(ctx, conn, s.Port)
+		if err != nil {
 			return fmt.Errorf("STARTTLS failed: %v", err)
 		}
 	}
@@ -70,7 +71,8 @@ func (s *Scanner) Start() error {
 
 	// Upgrade connection to TLS
 	tlsConn := tls.Client(conn, tlsConfig)
-	if err := tlsConn.Handshake(); err != nil {
+	err = tlsConn.Handshake()
+	if err != nil {
 		return fmt.Errorf("TLS handshake failed: %v", err)
 	}
 	defer tlsConn.Close()
