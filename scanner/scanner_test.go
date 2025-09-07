@@ -30,6 +30,7 @@ func TestNewScanner(t *testing.T) {
 			if s.Host != tt.wantHost {
 				t.Errorf("NewScanner().Host = %v, want %v", s.Host, tt.wantHost)
 			}
+
 			if s.Port != tt.wantPort {
 				t.Errorf("NewScanner().Port = %v, want %v", s.Port, tt.wantPort)
 			}
@@ -82,7 +83,9 @@ func TestScanner_Start(t *testing.T) {
 			tlsConn.Close()
 		}
 	}() // Create and start scanner
+
 	s := NewTestScanner("localhost", port)
+
 	err = s.Start()
 	if err != nil {
 		t.Fatalf("Failed to start scanner: %v", err)
@@ -92,9 +95,11 @@ func TestScanner_Start(t *testing.T) {
 	if s.EntityCertificate == nil {
 		t.Error("Expected EntityCertificate to be set")
 	}
+
 	if s.Version == "" {
 		t.Error("Expected Version to be set")
 	}
+
 	if s.Cipher == "" {
 		t.Error("Expected Cipher to be set")
 	}
