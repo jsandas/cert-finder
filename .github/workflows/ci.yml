@@ -27,19 +27,8 @@ jobs:
         go-version-file: "go.mod"
         cache: true
 
-    - name: Install golangci-lint
-      uses: golangci/golangci-lint-action@v8
-      with:
-        version: latest
-        
-    - name: Run golangci-lint
-      run: make lint
-        
-    - name: Check gofmt
-      run: make fmt-check
-        
-    - name: Check go mod
-      run: make mod-check
+    - name: Run Golang Lint
+      uses: jsandas/github-actions/.github/workflows/golang-lint.yml@main
 
   security:
     name: Security Scan
