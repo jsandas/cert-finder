@@ -9,8 +9,8 @@ on:
       - "**/*.go"
       - "**/go.mod"
       - "**/go.sum"
-      - "./github/workflows/ci.yml"
-      - "./.golangci.yml"
+      - "github/workflows/ci.yml"
+      - ".golangci.yml"
 
 jobs:
   lint:
