@@ -14,21 +14,9 @@ on:
 
 jobs:
   lint:
-    name: Lint and Format Check
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v5
-      
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: "go.mod"
-        cache: true
-
-    - name: Run Golang Lint
-      uses: jsandas/github-actions/.github/workflows/golang-lint.yml@main
+    permissions:
+      contents: read
+    uses: jsandas/github-actions/.github/workflows/golang-lint.yml@main
 
   security:
     name: Security Scan
