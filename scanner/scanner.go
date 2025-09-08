@@ -46,8 +46,10 @@ func (s *Scanner) Start() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Connect to server
-	conn, err := net.Dial("tcp", net.JoinHostPort(s.Host, s.Port))
+	// Connect to servers
+	dialer := &net.Dialer{}
+
+	conn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(s.Host, s.Port))
 	if err != nil {
 		return fmt.Errorf("failed to connect: %v", err)
 	}
@@ -71,7 +73,8 @@ func (s *Scanner) Start() error {
 
 	// Upgrade connection to TLS
 	tlsConn := tls.Client(conn, tlsConfig)
-	err = tlsConn.Handshake()
+
+	err = tlsConn.HandshakeContext(ctx)
 	if err != nil {
 		return fmt.Errorf("TLS handshake failed: %v", err)
 	}

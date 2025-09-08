@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
 	"testing"
@@ -46,7 +47,9 @@ func TestScanner_Start(t *testing.T) {
 	}
 
 	// Start a plain TCP server that will upgrade to TLS
-	listener, err := net.Listen("tcp", "localhost:0")
+	lc := net.ListenConfig{}
+
+	listener, err := lc.Listen(context.Background(), "tcp", "localhost:0")
 	if err != nil {
 		t.Fatalf("Failed to start test server: %v", err)
 	}
@@ -61,6 +64,10 @@ func TestScanner_Start(t *testing.T) {
 	// Handle connections in a goroutine
 	go func() {
 		for {
+			// Create a context with timeout
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
 			conn, err := listener.Accept()
 			if err != nil {
 				return
@@ -73,7 +80,8 @@ func TestScanner_Start(t *testing.T) {
 			tlsConn := tls.Server(conn, config)
 
 			// Perform handshake
-			if err := tlsConn.Handshake(); err != nil {
+			err = tlsConn.HandshakeContext(ctx)
+			if err != nil {
 				tlsConn.Close()
 				return
 			}
