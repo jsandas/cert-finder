@@ -38,8 +38,8 @@ jobs:
     - name: Check gofmt
       run: make fmt-check
         
-    - name: Check go mod tidy
-      run: make go-mod-tidy
+    - name: Check go mod
+      run: make mod-check
 
   security:
     name: Security Scan
