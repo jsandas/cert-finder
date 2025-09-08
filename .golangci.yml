@@ -1,167 +1,60 @@
-run:
-  timeout: 5m
-  go: "1.25"
-  modules-download-mode: readonly
-  # Global Go version for all linters
-
-# This is the version of golangci-lint configuration
-# version: 2  # Commented out for v1 compatibility
-
+version: "2"
 linters:
+  default: none
   enable:
-    - govet
-    - errcheck
-    - staticcheck
-    - ineffassign
-    - unused
-    - misspell
-    - gosec
-    - gocyclo
+    - asciicheck
+    - contextcheck
     - dupl
+    - embeddedstructfieldcheck
+    - errcheck
+    - funcorder
     - goconst
     - gocritic
+    - gocyclo
     - godot
     - goheader
     - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
     - lll
+    - misspell
     - nakedret
     - noctx
+    - noinlineerr
     - nolintlint
     - rowserrcheck
+    - staticcheck
     - unconvert
     - unparam
+    - unused
     - whitespace
-
-linters-settings:
-  gocyclo:
-    min-complexity: 15
-  dupl:
-    threshold: 100
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport # https://github.com/go-critic/go-critic/issues/845
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-  gosec:
-    excludes:
-      - G404 # Use of weak random number generator (math/rand instead of crypto/rand)
-      - G402 # Use of weak cryptographic primitives
-  lll:
-    line-length: 140
-  goheader:
-    template-path: ""
-    values:
-      const:
-        Author: "jsandas"
-        Email: "jsandas@users.noreply.github.com"
-        Year: "2024"
-  goprintffuncname:
-    prefix: "log"
-  govet:
-    shadow: true
-  staticcheck: {}
-  ineffassign:
-    check-blank: true
-  misspell:
-    locale: US
-  nakedret:
-    max-func-lines: 30
-  noctx:
-    include: ""
-  nolintlint:
-    allow-unused: false
-    allow-leading-space: true
-    require-explanation: false
-    require-specific: false
-  rowserrcheck:
-    packages:
-      - database/sql
-  unconvert:
-    fast: true
-  unparam:
-    check-exported: false
-  whitespace:
-    multi-if: false
-    multi-func: false
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gomnd
-        - gocyclo
-        - dupl
-        - goconst
-        - gocritic
-        - gosec
-        - lll
-        - goprintffuncname
-        - gosec
-        - govet
-        - ineffassign
-        - misspell
-        - nakedret
-        - noctx
-        - nolintlint
-        - rowserrcheck
-        - staticcheck
-        - unconvert
-        - unparam
-        - whitespace
-    - path: integration_test\.go
-      linters:
-        - gomnd
-        - gocyclo
-        - dupl
-        - goconst
-        - gocritic
-        - gosec
-        - lll
-        - goprintffuncname
-        - gosec
-        - govet
-        - ineffassign
-        - misspell
-        - nakedret
-        - noctx
-        - nolintlint
-        - rowserrcheck
-        - staticcheck
-        - unconvert
-        - unparam
-        - whitespace
-    - path: test_helpers\.go
-      linters:
-        - gomnd
-        - gocyclo
-        - dupl
-        - goconst
-        - gocritic
-        - gosec
-        - lll
-        - goprintffuncname
-        - gosec
-        - govet
-        - ineffassign
-        - misspell
-        - nakedret
-        - noctx
-        - nolintlint
-        - rowserrcheck
-        - staticcheck
-        - unconvert
-        - unparam
-        - whitespace
-  max-issues-per-linter: 0
-  max-same-issues: 0
+    - wsl_v5
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      # Exclude some linters from running on tests files.
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - errcheck
+          - dupl
+          - gosec
+  settings:
+    dupl:
+      threshold: 100
+    gocyclo:
+      min-complexity: 10
+    gosec:
+      excludes:
+        - G404 # Use of weak random number generator (math/rand instead of crypto/rand)
+        - G402 # Use of weak cryptographic primitives
