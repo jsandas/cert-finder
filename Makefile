@@ -8,7 +8,7 @@ test-unit:
 	@go test -v ./...
 
 # Run all code quality checks
-quality: fmt-check mod-check lint
+quality: fmt-check go-mod-tidy lint
 	@echo "All code quality checks passed!"
 
 # Run linting with golangci-lint
@@ -37,12 +37,13 @@ fmt:
 	gofmt -s -w .
 
 # Check go mod tidy
-mod-check:
-	@echo "Checking go.mod and go.sum..."
-	@git diff --quiet go.mod || (echo "go.mod or go.sum has uncommitted changes. Please commit them first." && exit 1)
-	go mod tidy
-	@git diff --quiet go.mod || (echo "go.mod or go.sum is not tidy. Please run 'go mod tidy' and commit changes." && git diff go.mod go.sum && exit 1)
-	@echo "Go modules are tidy"
+go-mod-tidy:
+	@go mod tidy
+	@if [ -n "$(shell git status --porcelain | egrep '(go.mod|go.sum)')" ]; then \
+		echo "go.mod or go.sum is not tidy. Please run 'go mod tidy'"; \
+		exit 1; \
+	fi
+	@echo "go.mod and go.sum are tidy"
 
 
 # Show help
@@ -57,7 +58,7 @@ help:
 	@echo "  lint-install       - Install golangci-lint and run linting"
 	@echo "  fmt-check          - Check code formatting"
 	@echo "  fmt                - Format code with gofmt"
-	@echo "  mod-check          - Check if go.mod is tidy"
+	@echo "  go-mod-tidy        - Check if go.mod is tidy"
 	@echo ""
 	@echo "Other:"
 	@echo "  help               - Show this help"
