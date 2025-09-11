@@ -9,7 +9,7 @@ import (
 func main() {
 
 	test := scanner.NewScanner("www.google.com", "443")
-	err := test.Start()
+	err := test.CheckHost()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return

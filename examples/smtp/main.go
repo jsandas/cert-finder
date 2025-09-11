@@ -9,7 +9,7 @@ import (
 func main() {
 
 	test := scanner.NewScanner("smtp.gmail.com", "587")
-	err := test.Start()
+	err := test.CheckHost()
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return

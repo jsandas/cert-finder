@@ -8,7 +8,9 @@ A Go library for retrieving TLS certificate information from remote servers. Bui
 
 ## Features
 
-- **Automatic Protocol Detection**: Seamlessly handles both direct TLS and STARTTLS connections
+- **Dual Operation Modes**: 
+  - Remote scanning with automatic protocol detection (direct TLS and STARTTLS)
+  - Local certificate file/directory scanning (PEM and DER formats)
 - **Comprehensive Certificate Information**: Retrieves complete certificate chains and details
 - **Modern TLS Support**: Compatible with TLS 1.2 and 1.3
 - **Rich Connection Details**: Reports negotiated protocol versions and cipher suites
@@ -23,7 +25,10 @@ go get github.com/jsandas/cert-finder
 
 ## Usage
 
-Basic example:
+The library supports two main modes of operation:
+
+### Remote Certificate Scanning
+
 ```go
 package main
 
@@ -35,21 +40,57 @@ import (
 )
 
 func main() {
-    // Create a new scanner
+    // Create a scanner for remote host
     s := scanner.NewScanner("example.com", "443")
     
-    // Start the scan
-    err := s.Start()
+    // Scan remote host
+    err := s.CheckHost()
     if err != nil {
         log.Fatalf("Scan failed: %v", err)
     }
 
-    // Access results
+    // Access connection details
     fmt.Printf("TLS Version: %s\n", s.Version)
     fmt.Printf("Cipher Suite: %s\n", s.Cipher)
+    
+    // Access certificate information
     fmt.Printf("Subject: %s\n", s.EntityCertificate.Subject)
     fmt.Printf("Issuer: %s\n", s.EntityCertificate.Issuer)
     fmt.Printf("Not After: %s\n", s.EntityCertificate.NotAfter)
+}
+```
+
+### Local Certificate File Scanning
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+
+    "github.com/jsandas/cert-finder/scanner"
+)
+
+func main() {
+    // Create a scanner for local files
+    s := &scanner.Scanner{
+        Path: "/path/to/certs",
+    }
+    
+    // Scan directory for certificates
+    err := s.CheckPath()
+    if err != nil {
+        log.Fatalf("Scan failed: %v", err)
+    }
+
+    // Process found certificates
+    for i, cert := range s.Certificates {
+        fmt.Printf("Certificate %d:\n", i+1)
+        fmt.Printf("  Subject: %s\n", cert.Subject)
+        fmt.Printf("  Issuer: %s\n", cert.Issuer)
+        fmt.Printf("  Not After: %s\n", cert.NotAfter)
+    }
 }
 ```
 
@@ -66,16 +107,29 @@ Automatically detects and handles:
 | FTP      | 21           | STARTTLS |
 | XMPP     | 5222         | STARTTLS |
 
+## Supported File Formats
+
+When scanning local certificates, the following formats are supported:
+
+| Format | File Extensions | Description |
+|--------|----------------|-------------|
+| PEM    | .pem, .crt, .cer | Base64 encoded certificates with BEGIN/END markers |
+| DER    | .der           | Binary encoded X.509 certificates |
+
 ## Testing
 
-The package includes testing utilities for mocking TLS servers:
+The package includes testing utilities for both remote and local certificate scanning:
 
 ```go
-// Create a test scanner that skips STARTTLS
+// Test remote scanning (skips STARTTLS)
 s := scanner.NewTestScanner("localhost", "8443")
+err := s.CheckHost()
 
-// Run your tests
-err := s.Start()
+// Test local certificate scanning
+s := &scanner.Scanner{
+    Path: "testdata/certs",
+}
+err := s.CheckPath()
 ```
 
 Run the test suite:
