@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/jsandas/starttls-go/starttls"
@@ -14,13 +16,15 @@ import (
 )
 
 type Scanner struct {
+	Path              string
 	Host              string
 	Port              string
 	Version           string
 	Cipher            string
-	EntityCertificate *x509.Certificate
-	ChainCertificates []*x509.Certificate
-	skipStartTLS      bool // for testing purposes
+	Certificates      []*x509.Certificate // All certificates found in file/folder
+	EntityCertificate *x509.Certificate   // Leaf certificate
+	ChainCertificates []*x509.Certificate // Intermediate certificates
+	skipStartTLS      bool                // for testing purposes
 }
 
 func NewScanner(host, port string) *Scanner {
@@ -39,7 +43,8 @@ func NewTestScanner(host, port string) *Scanner {
 	}
 }
 
-func (s *Scanner) Start() error {
+// CheckHost scans a host for TLS certificate information.
+func (s *Scanner) CheckHost() error {
 	log.Printf("Starting scanner on port %s", s.Port)
 
 	// Create a context with timeout
@@ -85,6 +90,40 @@ func (s *Scanner) Start() error {
 	s.Cipher = ftls.CipherToName[state.CipherSuite]
 	s.EntityCertificate = state.PeerCertificates[0]
 	s.ChainCertificates = state.PeerCertificates[1:]
+
+	return nil
+}
+
+// CheckPath scans a folder for TLS certificate information.
+func (s *Scanner) CheckPath() error {
+	log.Printf("Starting scanner in path %s", s.Path)
+
+	// search for .pem, .crt, .cer files and parse certificates in a folder
+	files, err := os.ReadDir(s.Path)
+	if err != nil {
+		return fmt.Errorf("failed to read folder: %v", err)
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		if strings.HasSuffix(file.Name(), ".pem") || strings.HasSuffix(file.Name(), ".crt") ||
+			strings.HasSuffix(file.Name(), ".cer") || strings.HasSuffix(file.Name(), ".der") {
+			filePath := fmt.Sprintf("%s/%s", s.Path, file.Name())
+
+			certs, err := parseFile(filePath)
+			if err != nil {
+				log.Printf("Failed to read file %s: %v", filePath, err)
+				continue
+			}
+
+			s.Certificates = append(s.Certificates, certs...)
+
+			log.Printf("Parsed certificates from file %s", filePath)
+		}
+	}
 
 	return nil
 }
