@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -17,7 +18,7 @@ func parseFile(path string) ([]*x509.Certificate, error) {
 
 	// parse certificates in a file
 	// Read the file
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
