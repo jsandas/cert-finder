@@ -101,7 +101,7 @@ func TestScanner_CheckHost(t *testing.T) {
 	}
 
 	// Verify that scanner captured certificate details
-	if s.EntityCertificate == nil {
+	if s.EntityCertificate == (CertificateInfo{}) {
 		t.Error("Expected EntityCertificate to be set")
 	}
 
@@ -181,16 +181,16 @@ func TestScanner_CheckPath(t *testing.T) {
 
 				// Check first certificate details if available
 				if len(s.Certificates) > 0 {
-					cert := s.Certificates[0]
-					if got := cert.Subject.String(); got != tt.wantSubject {
+					certData := s.Certificates[0]
+					if got := certData.Certificate.Subject.String(); got != tt.wantSubject {
 						t.Errorf("First certificate subject = %v, want %v", got, tt.wantSubject)
 					}
 
-					if got := cert.NotBefore.String(); got != tt.wantNotBefore {
+					if got := certData.Certificate.NotBefore.String(); got != tt.wantNotBefore {
 						t.Errorf("First certificate NotBefore = %v, want %v", got, tt.wantNotBefore)
 					}
 
-					if got := cert.NotAfter.String(); got != tt.wantNotAfter {
+					if got := certData.Certificate.NotAfter.String(); got != tt.wantNotAfter {
 						t.Errorf("First certificate NotAfter = %v, want %v", got, tt.wantNotAfter)
 					}
 				}
@@ -198,8 +198,8 @@ func TestScanner_CheckPath(t *testing.T) {
 				// Check for unique certificates
 				seen := make(map[string]bool)
 
-				for _, cert := range s.Certificates {
-					serial := cert.SerialNumber.String()
+				for _, certData := range s.Certificates {
+					serial := certData.Certificate.SerialNumber.String()
 					if seen[serial] {
 						t.Errorf("Found duplicate certificate with serial number %s", serial)
 					}
