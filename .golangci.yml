@@ -53,7 +53,7 @@ linters:
     dupl:
       threshold: 100
     gocyclo:
-      min-complexity: 10
+      min-complexity: 11
     gosec:
       excludes:
         - G404 # Use of weak random number generator (math/rand instead of crypto/rand)

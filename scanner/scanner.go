@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -21,10 +22,39 @@ type Scanner struct {
 	Port              string
 	Version           string
 	Cipher            string
-	Certificates      []*x509.Certificate // All certificates found in file/folder
-	EntityCertificate *x509.Certificate   // Leaf certificate
-	ChainCertificates []*x509.Certificate // Intermediate certificates
-	skipStartTLS      bool                // for testing purposes
+	Certificates      []CertificateInfo // All certificates found in file/folder
+	EntityCertificate CertificateInfo   // Leaf certificate
+	ChainCertificates []CertificateInfo // Intermediate certificates
+	skipStartTLS      bool              // for testing purposes
+}
+
+type CertificateInfo struct {
+	Certificate  *x509.Certificate
+	Issuer       string
+	Subject      string
+	NotBefore    time.Time
+	NotAfter     time.Time
+	SerialNumber string
+	Fingerprint  string
+	Status       string // Valid, Expired, NotYetValid, Revoked
+}
+
+func (ci *CertificateInfo) Process() error {
+	ci.Issuer = ci.Certificate.Issuer.CommonName
+	ci.Subject = ci.Certificate.Subject.CommonName
+	ci.NotBefore = ci.Certificate.NotBefore
+	ci.NotAfter = ci.Certificate.NotAfter
+	ci.SerialNumber = ci.Certificate.SerialNumber.String()
+
+	hash, err := certificateSha256(ci.Certificate)
+	if err != nil {
+		return fmt.Errorf("failed to compute fingerprint: %v", err)
+	}
+
+	ci.Fingerprint = hash
+	ci.Status = "Valid" // Default status
+
+	return nil
 }
 
 func NewScanner(host, port string) *Scanner {
@@ -88,8 +118,36 @@ func (s *Scanner) CheckHost() error {
 	state := tlsConn.ConnectionState()
 	s.Version = ftls.ProtocolToName[int(state.Version)]
 	s.Cipher = ftls.CipherToName[state.CipherSuite]
-	s.EntityCertificate = state.PeerCertificates[0]
-	s.ChainCertificates = state.PeerCertificates[1:]
+
+	s.EntityCertificate = CertificateInfo{
+		Certificate: state.PeerCertificates[0],
+	}
+
+	err = s.EntityCertificate.Process()
+	if err != nil {
+		return fmt.Errorf("failed to process certificate: %v", err)
+	}
+
+	hash, err := certificateSha256(state.PeerCertificates[0])
+	if err != nil {
+		return fmt.Errorf("failed to compute fingerprint: %v", err)
+	}
+
+	s.EntityCertificate.Fingerprint = hash
+	s.EntityCertificate.Status = "Valid" // Default status
+
+	for _, cert := range state.PeerCertificates[1:] {
+		chainCert := CertificateInfo{
+			Certificate: cert,
+		}
+
+		err := chainCert.Process()
+		if err != nil {
+			return fmt.Errorf("failed to process chain certificate: %v", err)
+		}
+
+		s.ChainCertificates = append(s.ChainCertificates, chainCert)
+	}
 
 	return nil
 }
@@ -119,11 +177,34 @@ func (s *Scanner) CheckPath() error {
 				continue
 			}
 
-			s.Certificates = append(s.Certificates, certs...)
+			for _, cert := range certs {
+				certInfo := CertificateInfo{
+					Certificate: cert,
+				}
+
+				err := certInfo.Process()
+				if err != nil {
+					log.Printf("Failed to process certificate in file %s: %v", filePath, err)
+					continue
+				}
+
+				s.Certificates = append(s.Certificates, certInfo)
+			}
 
 			log.Printf("Parsed certificates from file %s", filePath)
 		}
 	}
 
 	return nil
+}
+
+func certificateSha256(cert *x509.Certificate) (string, error) {
+	h := sha256.New()
+
+	_, err := h.Write(cert.Raw)
+	if err != nil {
+		return "", fmt.Errorf("failed to compute fingerprint: %v", err)
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
