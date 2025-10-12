@@ -237,6 +237,60 @@ func checkOCSP(cert *x509.Certificate, issuerCert *x509.Certificate, status *Cer
 	return lastErr
 }
 
+// fetchCRL retrieves and parses a CRL from the given URL.
+func fetchCRL(crlDP string) (*x509.RevocationList, error) {
+	resp, err := safeHTTPGet(crlDP)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Try to parse as DER first
+	crl, err := x509.ParseRevocationList(body)
+	if err != nil {
+		// Try PEM format if DER fails
+		block, _ := pem.Decode(body)
+		if block != nil {
+			crl, err = x509.ParseRevocationList(block.Bytes)
+		}
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return crl, nil
+}
+
+// updateCRLStatus updates the status struct with CRL information and checks for revocation.
+func updateCRLStatus(cert *x509.Certificate, crl *x509.RevocationList, status *CertStatus) bool {
+	status.CRLNextUpdate = crl.NextUpdate
+	status.CRLSerials = make([]string, 0, len(crl.RevokedCertificateEntries))
+
+	for _, cert := range crl.RevokedCertificateEntries {
+		status.CRLSerials = append(status.CRLSerials, cert.SerialNumber.String())
+	}
+
+	// Check if serial number is in the CRL
+	for _, revokedCert := range crl.RevokedCertificateEntries {
+		if cert.SerialNumber.Cmp(revokedCert.SerialNumber) == 0 {
+			status.CRLStatus = fmt.Sprintf("Revoked at %s", revokedCert.RevocationTime)
+			status.IsValid = false
+
+			return true
+		}
+	}
+
+	status.CRLStatus = "Good"
+
+	return false
+}
+
 func checkCRL(cert *x509.Certificate, status *CertStatus) error {
 	// Skip if no CRL endpoints defined
 	if len(cert.CRLDistributionPoints) == 0 {
@@ -253,33 +307,10 @@ func checkCRL(cert *x509.Certificate, status *CertStatus) error {
 			continue
 		}
 
-		// Get CRL
-		resp, err := safeHTTPGet(crlDP)
+		crl, err := fetchCRL(crlDP)
 		if err != nil {
 			lastErr = err
 			continue
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		// Try to parse as DER first
-		crl, err := x509.ParseRevocationList(body)
-		if err != nil {
-			// Try PEM format if DER fails
-			block, _ := pem.Decode(body)
-			if block != nil {
-				crl, err = x509.ParseRevocationList(block.Bytes)
-			}
-
-			if err != nil {
-				lastErr = err
-				continue
-			}
 		}
 
 		// Check if the CRL is still valid
@@ -288,27 +319,12 @@ func checkCRL(cert *x509.Certificate, status *CertStatus) error {
 			continue
 		}
 
-		// Store CRL information
-		status.CRLNextUpdate = crl.NextUpdate
-
-		status.CRLSerials = make([]string, 0, len(crl.RevokedCertificateEntries))
-		for _, cert := range crl.RevokedCertificateEntries {
-			status.CRLSerials = append(status.CRLSerials, cert.SerialNumber.String())
+		// Update status and check for revocation
+		if updateCRLStatus(cert, crl, status) {
+			return nil // Certificate was found in CRL
 		}
 
-		// Check if serial number is in the CRL
-		for _, revokedCert := range crl.RevokedCertificateEntries {
-			if cert.SerialNumber.Cmp(revokedCert.SerialNumber) == 0 {
-				status.CRLStatus = fmt.Sprintf("Revoked at %s", revokedCert.RevocationTime)
-				status.IsValid = false
-
-				return nil
-			}
-		}
-
-		status.CRLStatus = "Good"
-
-		return nil
+		return nil // Certificate is good
 	}
 
 	return lastErr
