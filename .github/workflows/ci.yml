@@ -19,30 +19,10 @@ jobs:
     uses: jsandas/github-actions/.github/workflows/golang-lint.yml@main
 
   security:
-    name: Security Scan
-    runs-on: ubuntu-latest
     permissions:
+      contents: read
       security-events: write
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v5
-      
-    - name: Set up Go
-      uses: actions/setup-go@v6
-      with:
-        go-version-file: "go.mod"
-        cache: true
-        
-    - name: Run gosec security scanner
-      uses: securego/gosec@master
-      with:
-        args: '-fmt sarif -out results.sarif ./...'
-        
-    - name: Upload SARIF file
-      uses: github/codeql-action/upload-sarif@v4
-      if: always()
-      with:
-        sarif_file: results.sarif
+    uses: jsandas/github-actions/.github/workflows/golang-security.yml@main
 
   test:
     name: Unit Tests
