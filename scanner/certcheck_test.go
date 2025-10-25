@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +27,10 @@ func TestCheckCertStatus(t *testing.T) {
 	issuerTemplate := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			CommonName: "Test Issuer",
+			CommonName:         "Test Issuer CA",
+			Country:            []string{"US"},
+			Organization:       []string{"Test Org"},
+			OrganizationalUnit: []string{"Test Unit"},
 		},
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
@@ -58,13 +62,15 @@ func TestCheckCertStatus(t *testing.T) {
 
 	// Create and setup OCSP server
 	ocspServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := ocsp.Response{
-			Status:     ocsp.Good,
-			NextUpdate: time.Now().Add(24 * time.Hour),
-			ThisUpdate: time.Now(),
+		// Create a proper OCSP response with full certificate details
+		template := ocsp.Response{
+			Status:       ocsp.Good,
+			SerialNumber: big.NewInt(100),
+			ThisUpdate:   time.Now(),
+			NextUpdate:   time.Now().Add(24 * time.Hour),
 		}
 
-		respBytes, err := ocsp.CreateResponse(issuerCert, issuerCert, resp, issuerKey)
+		respBytes, err := ocsp.CreateResponse(issuerCert, issuerCert, template, issuerKey)
 		if err != nil {
 			t.Fatalf("Failed to create OCSP response: %v", err)
 		}
@@ -93,63 +99,95 @@ func TestCheckCertStatus(t *testing.T) {
 	defer crlServer.Close()
 
 	tests := []struct {
-		name          string
-		cert          *x509.Certificate
-		wantValid     bool
-		wantOCSPError bool
-		wantCRLError  bool
-		wantErr       bool
+		name           string
+		cert           *x509.Certificate
+		wantValid      bool
+		wantErrors     []string // Expected error messages
+		wantOCSPStatus string
+		wantCRLStatus  string
+		wantCRLSerials []string // Expected serial numbers in CRL
 	}{
 		{
-			name:    "expired certificate",
-			cert:    &x509.Certificate{NotAfter: time.Now().Add(-24 * time.Hour)},
-			wantErr: true,
+			name: certExpired,
+			cert: &x509.Certificate{
+				SerialNumber: big.NewInt(100),
+				Subject: pkix.Name{
+					CommonName:         "Test Server",
+					Country:            []string{"US"},
+					Organization:       []string{"Test Org"},
+					OrganizationalUnit: []string{"Test Unit"},
+				},
+				NotBefore:             time.Now().Add(-48 * time.Hour),
+				NotAfter:              time.Now().Add(-24 * time.Hour),
+				IssuingCertificateURL: []string{issuerServer.URL},
+				AuthorityKeyId:        []byte{1, 2, 3},
+			},
+			wantValid:  false,
+			wantErrors: []string{certExpired},
 		},
 		{
-			name:    "not yet valid certificate",
-			cert:    &x509.Certificate{NotBefore: time.Now().Add(24 * time.Hour)},
-			wantErr: true,
+			name: certNotYetValid,
+			cert: &x509.Certificate{
+				NotBefore:             time.Now().Add(24 * time.Hour),
+				NotAfter:              time.Now().Add(48 * time.Hour),
+				IssuingCertificateURL: []string{issuerServer.URL},
+			},
+			wantValid:  false,
+			wantErrors: []string{certNotYetValid},
 		},
 		{
-			name: "certificate with no AIA",
+			name: certNoAIA,
 			cert: &x509.Certificate{
 				NotBefore: time.Now().Add(-24 * time.Hour),
 				NotAfter:  time.Now().Add(24 * time.Hour),
 			},
-			wantErr: true,
+			wantValid:  false,
+			wantErrors: []string{fmt.Sprintf("%s: no CA issuers found in AIA extension", certUnreachable)},
 		},
 		{
-			name: "certificate with unreachable issuer",
+			name: certUnreachable,
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
 				IssuingCertificateURL: []string{"http://invalid.example.com"},
 			},
-			wantErr: true,
+			wantValid:  false,
+			wantErrors: []string{certUnreachable},
 		},
 		{
-			name: "valid certificate with no OCSP/CRL",
+			name: certValidNoOCSP,
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
 				IssuingCertificateURL: []string{issuerServer.URL},
 				AuthorityKeyId:        []byte{1, 2, 3},
 			},
-			wantValid: true,
+			wantValid:      true,
+			wantOCSPStatus: certValidNoOCSP,
+			wantCRLStatus:  certNoAIA,
 		},
 		{
-			name: "valid certificate with OCSP",
+			name: certValidWithOCSP,
 			cert: &x509.Certificate{
+				SerialNumber: big.NewInt(100),
+				Subject: pkix.Name{
+					CommonName:         "Test Server",
+					Country:            []string{"US"},
+					Organization:       []string{"Test Org"},
+					OrganizationalUnit: []string{"Test Unit"},
+				},
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
 				IssuingCertificateURL: []string{issuerServer.URL},
 				AuthorityKeyId:        []byte{1, 2, 3},
 				OCSPServer:            []string{ocspServer.URL},
 			},
-			wantValid: true,
+			wantValid:      true,
+			wantOCSPStatus: "Good",
+			wantCRLStatus:  certNoAIA,
 		},
 		{
-			name: "valid certificate with CRL",
+			name: certValidWithCRL,
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
@@ -157,10 +195,12 @@ func TestCheckCertStatus(t *testing.T) {
 				AuthorityKeyId:        []byte{1, 2, 3},
 				CRLDistributionPoints: []string{crlServer.URL},
 			},
-			wantValid: true,
+			wantValid:      true,
+			wantOCSPStatus: certValidNoOCSP,
+			wantCRLStatus:  "Good",
 		},
 		{
-			name: "valid certificate with LDAP CRL",
+			name: certValidWithLDAP,
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
@@ -168,10 +208,12 @@ func TestCheckCertStatus(t *testing.T) {
 				AuthorityKeyId:        []byte{1, 2, 3},
 				CRLDistributionPoints: []string{"ldap://example.com/cn=crl"},
 			},
-			wantValid: true,
+			wantValid:      true,
+			wantOCSPStatus: certValidNoOCSP,
+			wantCRLStatus:  certValidWithLDAP,
 		},
 		{
-			name: "certificate with unreachable OCSP",
+			name: certUnreachableOCSP,
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
@@ -179,11 +221,15 @@ func TestCheckCertStatus(t *testing.T) {
 				AuthorityKeyId:        []byte{1, 2, 3},
 				OCSPServer:            []string{"http://invalid.example.com"},
 			},
-			wantValid:     true,
-			wantOCSPError: true,
+			wantValid: true,
+			wantErrors: []string{
+				"Unable to check OCSP status : failed to create OCSP request: asn1: structure error: empty integer",
+			},
+			wantOCSPStatus: "",
+			wantCRLStatus:  certNoAIA,
 		},
 		{
-			name: "certificate with unreachable CRL",
+			name: certUnreachableCRL,
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
@@ -191,41 +237,55 @@ func TestCheckCertStatus(t *testing.T) {
 				AuthorityKeyId:        []byte{1, 2, 3},
 				CRLDistributionPoints: []string{"http://invalid.example.com"},
 			},
-			wantValid:    true,
-			wantCRLError: true,
+			wantValid:      true,
+			wantErrors:     []string{certUnreachableCRL},
+			wantOCSPStatus: certValidNoOCSP,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status, err := CheckCertStatus(tt.cert)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("CheckCertStatus() error = %v, wantErr %v", err, tt.wantErr)
-			}
-
-			if tt.wantErr {
-				return
-			}
-
+			status := CheckCertStatus(tt.cert)
 			if status.IsValid != tt.wantValid {
 				t.Errorf("CheckCertStatus().IsValid = %v, want %v", status.IsValid, tt.wantValid)
 			}
 
-			if tt.wantOCSPError && !errorContains(status.Error, "OCSP") {
-				t.Errorf("Expected OCSP error in status.Error, got %v", status.Error)
+			// Check for expected errors
+			if len(tt.wantErrors) > 0 {
+				if status.Errors == nil {
+					t.Errorf("Expected errors %v but got nil", tt.wantErrors)
+					return
+				}
+
+				for _, wantErr := range tt.wantErrors {
+					found := false
+
+					for _, gotErr := range status.Errors {
+						if strings.Contains(gotErr, wantErr) {
+							found = true
+							break
+						}
+					}
+
+					if !found {
+						t.Errorf("Expected error containing '%s' not found in errors: %v", wantErr, status.Errors)
+					}
+				}
+			} else if status.Errors != nil {
+				t.Errorf("Expected no errors but got: %v", status.Errors)
 			}
 
-			if tt.wantCRLError && !errorContains(status.Error, "CRL") {
-				t.Errorf("Expected CRL error in status.Error, got %v", status.Error)
+			// Check OCSP status
+			if status.OCSPStatus != tt.wantOCSPStatus {
+				t.Errorf("OCSP status = %v, want %v", status.OCSPStatus, tt.wantOCSPStatus)
 			}
+
+			// Check CRL status
+			if status.CRLStatus != tt.wantCRLStatus {
+				t.Errorf("CRL status = %v, want %v", status.CRLStatus, tt.wantCRLStatus)
+			}
+
+			// Additional CRL checks can be added here as needed
 		})
 	}
-}
-
-func errorContains(err error, substr string) bool {
-	if err == nil {
-		return false
-	}
-
-	return strings.Contains(err.Error(), substr)
 }

@@ -15,17 +15,21 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
+// Additional certificate validation error constants.
+const (
+	ocspExpired = "OCSP response has expired"
+	crlExpired  = "CRL has expired"
+)
+
 // CertStatus represents the validity status of a certificate.
 type CertStatus struct {
 	IsValid      bool
 	OCSPStatus   string
 	CRLStatus    string
 	LastChecked  time.Time
-	Error        error
+	Errors       []string
 	OCSPResponse *ocsp.Response
-	// Storing just the relevant CRL information instead of the full response
-	CRLNextUpdate time.Time
-	CRLSerials    []string // List of revoked certificate serial numbers
+	CRLSerials   []string // List of revoked certificate serial numbers
 }
 
 // safeHTTPGet performs a GET request with URL validation and context.
@@ -127,61 +131,60 @@ func getIssuerCert(cert *x509.Certificate) (*x509.Certificate, error) {
 		return issuer, nil
 	}
 
-	return nil, fmt.Errorf("failed to retrieve issuer certificate: %v", lastErr)
+	return nil, fmt.Errorf("%s : %v", certUnreachable, lastErr)
 }
 
-// CheckCertStatus checks both OCSP and CRL status of a certificate.
-func CheckCertStatus(cert *x509.Certificate) (*CertStatus, error) {
+// CheckCertStatus checks Validity and both OCSP and CRL status of a certificate.
+func CheckCertStatus(cert *x509.Certificate) *CertStatus {
 	status := &CertStatus{
 		IsValid:     true,
 		LastChecked: time.Now(),
-	}
-
-	// Get issuer certificate
-	issuerCert, err := getIssuerCert(cert)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get issuer certificate: %v", err)
 	}
 
 	// Check basic validity period
 	now := time.Now()
 	if now.Before(cert.NotBefore) {
 		status.IsValid = false
-		status.Error = fmt.Errorf("certificate is not yet valid")
+		status.Errors = append(status.Errors, certNotYetValid)
 
-		return status, nil
+		return status
 	}
 
 	if now.After(cert.NotAfter) {
 		status.IsValid = false
-		status.Error = fmt.Errorf("certificate has expired")
+		status.Errors = append(status.Errors, certExpired)
 
-		return status, nil
+		return status
+	}
+
+	// Get issuer certificate
+	issuerCert, err := getIssuerCert(cert)
+	if err != nil {
+		status.IsValid = false
+		status.Errors = append(status.Errors, fmt.Sprintf("%s: %v", certUnreachable, err))
+
+		return status
 	}
 
 	// Check OCSP status
 	err = checkOCSP(cert, issuerCert, status)
 	if err != nil {
-		status.Error = fmt.Errorf("OCSP check failed: %v", err)
+		status.Errors = append(status.Errors, fmt.Sprintf("%s : %v", certUnreachableOCSP, err))
 	}
 
 	// Check CRL status
 	err = checkCRL(cert, status)
 	if err != nil {
-		if status.Error != nil {
-			status.Error = fmt.Errorf("%v; CRL check failed: %v", status.Error, err)
-		} else {
-			status.Error = fmt.Errorf("CRL check failed: %v", err)
-		}
+		status.Errors = append(status.Errors, fmt.Sprintf("%s : %v", certUnreachableCRL, err))
 	}
 
-	return status, nil
+	return status
 }
 
 func checkOCSP(cert *x509.Certificate, issuerCert *x509.Certificate, status *CertStatus) error {
 	// Skip if no OCSP servers defined
 	if len(cert.OCSPServer) == 0 {
-		status.OCSPStatus = "No OCSP servers defined"
+		status.OCSPStatus = certValidNoOCSP
 		return nil
 	}
 
@@ -216,7 +219,7 @@ func checkOCSP(cert *x509.Certificate, issuerCert *x509.Certificate, status *Cer
 
 		// Check if the OCSP response is still valid
 		if time.Now().After(ocspResponse.NextUpdate) {
-			lastErr = fmt.Errorf("OCSP response has expired")
+			lastErr = fmt.Errorf("%s", ocspExpired)
 			continue
 		}
 
@@ -269,7 +272,6 @@ func fetchCRL(crlDP string) (*x509.RevocationList, error) {
 
 // updateCRLStatus updates the status struct with CRL information and checks for revocation.
 func updateCRLStatus(cert *x509.Certificate, crl *x509.RevocationList, status *CertStatus) bool {
-	status.CRLNextUpdate = crl.NextUpdate
 	status.CRLSerials = make([]string, 0, len(crl.RevokedCertificateEntries))
 
 	for _, cert := range crl.RevokedCertificateEntries {
@@ -294,7 +296,7 @@ func updateCRLStatus(cert *x509.Certificate, crl *x509.RevocationList, status *C
 func checkCRL(cert *x509.Certificate, status *CertStatus) error {
 	// Skip if no CRL endpoints defined
 	if len(cert.CRLDistributionPoints) == 0 {
-		status.CRLStatus = "No CRL distribution points defined"
+		status.CRLStatus = certNoAIA
 		return nil
 	}
 
@@ -302,9 +304,10 @@ func checkCRL(cert *x509.Certificate, status *CertStatus) error {
 	var lastErr error
 
 	for _, crlDP := range cert.CRLDistributionPoints {
-		// Skip LDAP URLs
+		// Handle LDAP URLs
 		if strings.HasPrefix(strings.ToLower(crlDP), "ldap:") {
-			continue
+			status.CRLStatus = certValidWithLDAP
+			return nil
 		}
 
 		crl, err := fetchCRL(crlDP)
@@ -315,7 +318,7 @@ func checkCRL(cert *x509.Certificate, status *CertStatus) error {
 
 		// Check if the CRL is still valid
 		if time.Now().After(crl.NextUpdate) {
-			lastErr = fmt.Errorf("CRL has expired")
+			lastErr = fmt.Errorf("%s", crlExpired)
 			continue
 		}
 
