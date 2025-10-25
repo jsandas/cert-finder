@@ -259,12 +259,14 @@ func TestCheckCertStatus(t *testing.T) {
 
 				for _, wantErr := range tt.wantErrors {
 					found := false
+
 					for _, gotErr := range status.Errors {
 						if strings.Contains(gotErr, wantErr) {
 							found = true
 							break
 						}
 					}
+
 					if !found {
 						t.Errorf("Expected error containing '%s' not found in errors: %v", wantErr, status.Errors)
 					}
