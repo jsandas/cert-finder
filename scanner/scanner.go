@@ -36,7 +36,7 @@ type CertificateInfo struct {
 	NotAfter     time.Time
 	SerialNumber string
 	Fingerprint  string
-	Status       string // Valid, Expired, NotYetValid, Revoked
+	Status       *CertStatus
 }
 
 func (ci *CertificateInfo) Process() error {
@@ -52,7 +52,8 @@ func (ci *CertificateInfo) Process() error {
 	}
 
 	ci.Fingerprint = hash
-	ci.Status = "Valid" // Default status
+
+	ci.Status = CheckCertStatus(ci.Certificate)
 
 	return nil
 }
@@ -134,7 +135,6 @@ func (s *Scanner) CheckHost() error {
 	}
 
 	s.EntityCertificate.Fingerprint = hash
-	s.EntityCertificate.Status = "Valid" // Default status
 
 	for _, cert := range state.PeerCertificates[1:] {
 		chainCert := CertificateInfo{

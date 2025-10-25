@@ -9,7 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"strings"
+	"slices"
 	"testing"
 	"time"
 
@@ -101,14 +101,22 @@ func TestCheckCertStatus(t *testing.T) {
 		wantErr       bool
 	}{
 		{
-			name:    "expired certificate",
-			cert:    &x509.Certificate{NotAfter: time.Now().Add(-24 * time.Hour)},
-			wantErr: true,
+			name: "expired certificate",
+			cert: &x509.Certificate{
+				NotBefore:             time.Now().Add(-48 * time.Hour),
+				NotAfter:              time.Now().Add(-24 * time.Hour),
+				IssuingCertificateURL: []string{issuerServer.URL},
+			},
+			wantValid: false,
 		},
 		{
-			name:    "not yet valid certificate",
-			cert:    &x509.Certificate{NotBefore: time.Now().Add(24 * time.Hour)},
-			wantErr: true,
+			name: "not yet valid certificate",
+			cert: &x509.Certificate{
+				NotBefore:             time.Now().Add(24 * time.Hour),
+				NotAfter:              time.Now().Add(48 * time.Hour),
+				IssuingCertificateURL: []string{issuerServer.URL},
+			},
+			wantValid: false,
 		},
 		{
 			name: "certificate with no AIA",
@@ -198,9 +206,9 @@ func TestCheckCertStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status, err := CheckCertStatus(tt.cert)
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("CheckCertStatus() error = %v, wantErr %v", err, tt.wantErr)
+			status := CheckCertStatus(tt.cert)
+			if (status.Errors != nil) != tt.wantErr {
+				t.Fatalf("CheckCertStatus() error = %v, wantErr %v", status.Errors, tt.wantErr)
 			}
 
 			if tt.wantErr {
@@ -211,21 +219,21 @@ func TestCheckCertStatus(t *testing.T) {
 				t.Errorf("CheckCertStatus().IsValid = %v, want %v", status.IsValid, tt.wantValid)
 			}
 
-			if tt.wantOCSPError && !errorContains(status.Error, "OCSP") {
-				t.Errorf("Expected OCSP error in status.Error, got %v", status.Error)
+			if tt.wantOCSPError && !errorContains(status.Errors, "OCSP") {
+				t.Errorf("Expected OCSP error in status.Errors, got %v", status.Errors)
 			}
 
-			if tt.wantCRLError && !errorContains(status.Error, "CRL") {
-				t.Errorf("Expected CRL error in status.Error, got %v", status.Error)
+			if tt.wantCRLError && !errorContains(status.Errors, "CRL") {
+				t.Errorf("Expected CRL error in status.Errors, got %v", status.Errors)
 			}
 		})
 	}
 }
 
-func errorContains(err error, substr string) bool {
-	if err == nil {
+func errorContains(errors []string, substr string) bool {
+	if errors == nil {
 		return false
 	}
 
-	return strings.Contains(err.Error(), substr)
+	return slices.Contains(errors, substr)
 }
