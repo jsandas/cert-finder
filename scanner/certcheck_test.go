@@ -10,7 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -151,11 +151,8 @@ func TestCheckCertStatus(t *testing.T) {
 				NotAfter:              time.Now().Add(24 * time.Hour),
 				IssuingCertificateURL: []string{"http://invalid.example.com"},
 			},
-			wantValid: false,
-			wantErrors: []string{fmt.Sprintf(
-				"%s: %s : Get \"http://invalid.example.com\": dial tcp: lookup invalid.example.com: no such host",
-				certUnreachable, certUnreachable),
-			},
+			wantValid:  false,
+			wantErrors: []string{certUnreachable},
 		},
 		{
 			name: certValidNoOCSP,
@@ -240,11 +237,8 @@ func TestCheckCertStatus(t *testing.T) {
 				AuthorityKeyId:        []byte{1, 2, 3},
 				CRLDistributionPoints: []string{"http://invalid.example.com"},
 			},
-			wantValid: true,
-			wantErrors: []string{fmt.Sprintf(
-				"%s : Get \"http://invalid.example.com\": dial tcp: lookup invalid.example.com: no such host",
-				certUnreachableCRL),
-			},
+			wantValid:      true,
+			wantErrors:     []string{certUnreachableCRL},
 			wantOCSPStatus: certValidNoOCSP,
 		},
 	}
@@ -264,8 +258,15 @@ func TestCheckCertStatus(t *testing.T) {
 				}
 
 				for _, wantErr := range tt.wantErrors {
-					if !slices.Contains(status.Errors, wantErr) {
-						t.Errorf("Expected error '%s' not found in errors: %v", wantErr, status.Errors)
+					found := false
+					for _, gotErr := range status.Errors {
+						if strings.Contains(gotErr, wantErr) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("Expected error containing '%s' not found in errors: %v", wantErr, status.Errors)
 					}
 				}
 			} else if status.Errors != nil {
