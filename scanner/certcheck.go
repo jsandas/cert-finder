@@ -15,19 +15,10 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
+// Additional certificate validation error constants.
 const (
-	certExpired         = "expired certificate"
-	certNotYetValid     = "not yet valid certificate"
-	certNoAIA           = "certificate with no AIA"
-	certUnreachable     = "certificate with unreachable issuer"
-	certValidNoOCSP     = "valid certificate with no OCSP/CRL"
-	certValidWithOCSP   = "valid certificate with OCSP"
-	certValidWithCRL    = "valid certificate with CRL"
-	certValidWithLDAP   = "valid certificate with LDAP CRL"
-	certUnreachableOCSP = "certificate with unreachable OCSP"
-	certUnreachableCRL  = "certificate with unreachable CRL"
-	ocspExpired         = "OCSP response has expired"
-	crlExpired          = "CRL has expired"
+	ocspExpired = "OCSP response has expired"
+	crlExpired  = "CRL has expired"
 )
 
 // CertStatus represents the validity status of a certificate.
@@ -313,9 +304,10 @@ func checkCRL(cert *x509.Certificate, status *CertStatus) error {
 	var lastErr error
 
 	for _, crlDP := range cert.CRLDistributionPoints {
-		// Skip LDAP URLs
+		// Handle LDAP URLs
 		if strings.HasPrefix(strings.ToLower(crlDP), "ldap:") {
-			continue
+			status.CRLStatus = certValidWithLDAP
+			return nil
 		}
 
 		crl, err := fetchCRL(crlDP)
