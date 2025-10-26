@@ -20,6 +20,7 @@ type Scanner struct {
 	Path              string
 	Host              string
 	Port              string
+	IncludeStatusData bool
 	Version           string
 	Cipher            string
 	Certificates      []CertificateInfo // All certificates found in file/folder
@@ -37,6 +38,7 @@ type CertificateInfo struct {
 	SerialNumber string
 	Fingerprint  string
 	Status       *CertStatus
+	scanner      *Scanner
 }
 
 func (ci *CertificateInfo) Process() error {
@@ -53,7 +55,7 @@ func (ci *CertificateInfo) Process() error {
 
 	ci.Fingerprint = hash
 
-	ci.Status = CheckCertStatus(ci.Certificate)
+	ci.Status = CheckCertStatus(ci.Certificate, ci.scanner.IncludeStatusData)
 
 	return nil
 }
@@ -122,6 +124,7 @@ func (s *Scanner) CheckHost() error {
 
 	s.EntityCertificate = CertificateInfo{
 		Certificate: state.PeerCertificates[0],
+		scanner:     s,
 	}
 
 	err = s.EntityCertificate.Process()
@@ -139,6 +142,7 @@ func (s *Scanner) CheckHost() error {
 	for _, cert := range state.PeerCertificates[1:] {
 		chainCert := CertificateInfo{
 			Certificate: cert,
+			scanner:     s,
 		}
 
 		err := chainCert.Process()
@@ -180,6 +184,7 @@ func (s *Scanner) CheckPath() error {
 			for _, cert := range certs {
 				certInfo := CertificateInfo{
 					Certificate: cert,
+					scanner:     s,
 				}
 
 				err := certInfo.Process()

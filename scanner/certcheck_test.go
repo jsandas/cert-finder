@@ -245,7 +245,7 @@ func TestCheckCertStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status := CheckCertStatus(tt.cert)
+			status := CheckCertStatus(tt.cert, false)
 			if status.IsValid != tt.wantValid {
 				t.Errorf("CheckCertStatus().IsValid = %v, want %v", status.IsValid, tt.wantValid)
 			}

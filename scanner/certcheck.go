@@ -29,7 +29,7 @@ type CertStatus struct {
 	LastChecked  time.Time
 	Errors       []string
 	OCSPResponse *ocsp.Response
-	CRLSerials   []string // List of revoked certificate serial numbers
+	CRLData      *x509.RevocationList // List of revoked certificate serial numbers
 }
 
 // safeHTTPGet performs a GET request with URL validation and context.
@@ -135,7 +135,7 @@ func getIssuerCert(cert *x509.Certificate) (*x509.Certificate, error) {
 }
 
 // CheckCertStatus checks Validity and both OCSP and CRL status of a certificate.
-func CheckCertStatus(cert *x509.Certificate) *CertStatus {
+func CheckCertStatus(cert *x509.Certificate, includeStatusData bool) *CertStatus {
 	status := &CertStatus{
 		IsValid:     true,
 		LastChecked: time.Now(),
@@ -167,13 +167,13 @@ func CheckCertStatus(cert *x509.Certificate) *CertStatus {
 	}
 
 	// Check OCSP status
-	err = checkOCSP(cert, issuerCert, status)
+	err = checkOCSP(cert, issuerCert, status, includeStatusData)
 	if err != nil {
 		status.Errors = append(status.Errors, fmt.Sprintf("%s : %v", certUnreachableOCSP, err))
 	}
 
 	// Check CRL status
-	err = checkCRL(cert, status)
+	err = checkCRL(cert, status, includeStatusData)
 	if err != nil {
 		status.Errors = append(status.Errors, fmt.Sprintf("%s : %v", certUnreachableCRL, err))
 	}
@@ -181,7 +181,50 @@ func CheckCertStatus(cert *x509.Certificate) *CertStatus {
 	return status
 }
 
-func checkOCSP(cert *x509.Certificate, issuerCert *x509.Certificate, status *CertStatus) error {
+// processOCSPResponse updates the certificate status based on the OCSP response.
+func processOCSPResponse(response *ocsp.Response, status *CertStatus, includeStatusData bool) {
+	if includeStatusData {
+		status.OCSPResponse = response
+	}
+
+	switch response.Status {
+	case ocsp.Good:
+		status.OCSPStatus = "Good"
+	case ocsp.Revoked:
+		status.OCSPStatus = fmt.Sprintf("Revoked at %s", response.RevokedAt)
+		status.IsValid = false
+	case ocsp.Unknown:
+		status.OCSPStatus = "Unknown"
+	}
+}
+
+// fetchOCSPResponse attempts to get an OCSP response from a server.
+func fetchOCSPResponse(server string, request []byte, issuerCert *x509.Certificate) (*ocsp.Response, error) {
+	resp, err := safeHTTPPost(server, "application/ocsp-request", bytes.NewReader(request))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ocspResponse, err := ocsp.ParseResponse(body, issuerCert)
+	if err != nil {
+		return nil, err
+	}
+
+	if time.Now().After(ocspResponse.NextUpdate) {
+		return nil, fmt.Errorf("%s", ocspExpired)
+	}
+
+	return ocspResponse, nil
+}
+
+func checkOCSP(cert *x509.Certificate, issuerCert *x509.Certificate, status *CertStatus,
+	includeStatusData bool) error {
 	// Skip if no OCSP servers defined
 	if len(cert.OCSPServer) == 0 {
 		status.OCSPStatus = certValidNoOCSP
@@ -198,41 +241,13 @@ func checkOCSP(cert *x509.Certificate, issuerCert *x509.Certificate, status *Cer
 	var lastErr error
 
 	for _, server := range cert.OCSPServer {
-		resp, err := safeHTTPPost(server, "application/ocsp-request", bytes.NewReader(ocspRequest))
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
+		response, err := fetchOCSPResponse(server, ocspRequest, issuerCert)
 		if err != nil {
 			lastErr = err
 			continue
 		}
 
-		ocspResponse, err := ocsp.ParseResponse(body, issuerCert)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		// Check if the OCSP response is still valid
-		if time.Now().After(ocspResponse.NextUpdate) {
-			lastErr = fmt.Errorf("%s", ocspExpired)
-			continue
-		}
-
-		status.OCSPResponse = ocspResponse
-		switch ocspResponse.Status {
-		case ocsp.Good:
-			status.OCSPStatus = "Good"
-		case ocsp.Revoked:
-			status.OCSPStatus = fmt.Sprintf("Revoked at %s", ocspResponse.RevokedAt)
-			status.IsValid = false
-		case ocsp.Unknown:
-			status.OCSPStatus = "Unknown"
-		}
+		processOCSPResponse(response, status, includeStatusData)
 
 		return nil
 	}
@@ -271,11 +286,11 @@ func fetchCRL(crlDP string) (*x509.RevocationList, error) {
 }
 
 // updateCRLStatus updates the status struct with CRL information and checks for revocation.
-func updateCRLStatus(cert *x509.Certificate, crl *x509.RevocationList, status *CertStatus) bool {
-	status.CRLSerials = make([]string, 0, len(crl.RevokedCertificateEntries))
-
-	for _, cert := range crl.RevokedCertificateEntries {
-		status.CRLSerials = append(status.CRLSerials, cert.SerialNumber.String())
+func updateCRLStatus(cert *x509.Certificate, crl *x509.RevocationList, status *CertStatus,
+	includeStatusData bool) bool {
+	// Only store the CRL data if includeStatusData is true
+	if includeStatusData {
+		status.CRLData = crl
 	}
 
 	// Check if serial number is in the CRL
@@ -293,7 +308,7 @@ func updateCRLStatus(cert *x509.Certificate, crl *x509.RevocationList, status *C
 	return false
 }
 
-func checkCRL(cert *x509.Certificate, status *CertStatus) error {
+func checkCRL(cert *x509.Certificate, status *CertStatus, includeStatusData bool) error {
 	// Skip if no CRL endpoints defined
 	if len(cert.CRLDistributionPoints) == 0 {
 		status.CRLStatus = certNoAIA
@@ -323,7 +338,7 @@ func checkCRL(cert *x509.Certificate, status *CertStatus) error {
 		}
 
 		// Update status and check for revocation
-		if updateCRLStatus(cert, crl, status) {
+		if updateCRLStatus(cert, crl, status, includeStatusData) {
 			return nil // Certificate was found in CRL
 		}
 
