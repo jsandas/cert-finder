@@ -29,7 +29,7 @@ type CertStatus struct {
 	LastChecked  time.Time
 	Errors       []string
 	OCSPResponse *ocsp.Response
-	CRLSerials   []string // List of revoked certificate serial numbers
+	CRLData      *x509.RevocationList // List of revoked certificate serial numbers
 }
 
 // safeHTTPGet performs a GET request with URL validation and context.
@@ -272,11 +272,7 @@ func fetchCRL(crlDP string) (*x509.RevocationList, error) {
 
 // updateCRLStatus updates the status struct with CRL information and checks for revocation.
 func updateCRLStatus(cert *x509.Certificate, crl *x509.RevocationList, status *CertStatus) bool {
-	status.CRLSerials = make([]string, 0, len(crl.RevokedCertificateEntries))
-
-	for _, cert := range crl.RevokedCertificateEntries {
-		status.CRLSerials = append(status.CRLSerials, cert.SerialNumber.String())
-	}
+	status.CRLData = crl
 
 	// Check if serial number is in the CRL
 	for _, revokedCert := range crl.RevokedCertificateEntries {
