@@ -1,0 +1,100 @@
+# Coding Standards for cert-finder
+
+This file specifies the coding standards enforced by golangci-lint for this project.
+
+## Linters Enabled
+
+The following linters are enabled and must pass:
+
+### Code Quality & Correctness
+- **asciicheck**: Detects non-ASCII characters in comments
+- **contextcheck**: Ensures context.Context is passed correctly to functions that need it
+- **errcheck**: Ensures all errors are checked and handled
+- **govet**: Runs go vet to find suspicious constructs
+- **staticcheck**: High-confidence static analysis checks
+- **unconvert**: Removes unnecessary type conversions
+- **unused**: Detects unused constants, variables, functions, and types
+- **misspell**: Finds commonly misspelled English words in comments
+
+### Complexity & Duplication
+- **dupl**: Finds duplicated code blocks (threshold: 100 lines)
+- **gocyclo**: Checks cyclomatic complexity (max: 14)
+- **lll**: Enforces line length limits
+
+### Security
+- **gosec**: Scans for security vulnerabilities
+
+### Code Style & Readability
+- **godot**: Ensures Go doc comments end with a period
+- **gocritic**: Detects code style and best practice issues
+- **goheader**: Enforces file header requirements
+- **noctx**: Detects function calls without context in database/sql operations
+- **noinlineerr**: Avoids inlining errors without wrapping
+- **nakedret**: Detects naked returns (return without explicit values)
+- **whitespace**: Detects trailing whitespace and blank line issues
+- **wsl_v5**: Enforces Whitespace Linting rules (proper spacing between statements)
+- **funcorder**: Ensures function declarations are ordered consistently
+- **embeddedstructfieldcheck**: Detects embedded struct field issues
+- **nolintlint**: Ensures nolint directives are valid
+- **rowserrcheck**: Checks for RowsErr() usage in database operations
+- **goprintffuncname**: Ensures Printf-like functions have "f" suffix
+
+## Exclusions
+
+### Test Files
+The following linters are disabled for `*_test.go` files:
+- gocyclo (complexity check not needed for tests)
+- errcheck (error checking not required in test setup)
+- dupl (code duplication acceptable in tests)
+- gosec (security checks less critical in tests)
+
+### Generated Code
+Linting for generated code uses lax rules and applies preset exclusions for:
+- comments
+- common-false-positives
+- legacy
+- std-error-handling
+
+### Excluded Paths
+- `third_party/`: Third-party code
+- `builtin/`: Built-in code
+- `examples/`: Example code
+
+## Complexity Thresholds
+
+- **dupl threshold**: 100 lines (code blocks with 100+ duplicate lines trigger warnings)
+- **gocyclo min-complexity**: 14 (functions with cyclomatic complexity > 14 trigger warnings)
+
+## Best Practices
+
+When writing code for this project:
+
+1. **Error Handling**: Always check and handle errors explicitly
+2. **Context Passing**: Always pass context.Context to functions that need it
+3. **Documentation**: All exported functions must have doc comments ending with a period
+4. **Complexity**: Keep function cyclomatic complexity under 14
+5. **Duplication**: Avoid duplicating code blocks larger than 100 lines
+6. **Security**: Be aware of security vulnerabilities detected by gosec
+7. **Code Style**: Follow Go conventions and best practices as enforced by gocritic
+
+## Running Linters
+
+To check your code against these standards:
+
+```bash
+make lint              # Run golangci-lint (requires installation)
+make lint-install      # Install golangci-lint and run linting
+```
+
+Or directly:
+
+```bash
+golangci-lint run --timeout=5m
+```
+
+## Notes
+
+- Keep lines reasonably short to improve readability
+- Avoid naked returns; explicitly return values
+- Ensure proper whitespace between logical sections
+- Comment your code clearly, especially exported functions
