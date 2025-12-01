@@ -120,6 +120,7 @@ func TestScanner_CheckPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create test directory: %v", err)
 	}
+
 	defer os.RemoveAll("testdata/certtest")
 
 	// Copy test files to the test directory
