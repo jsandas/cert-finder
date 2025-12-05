@@ -216,7 +216,6 @@ func certificateSha256(cert *x509.Certificate) (string, error) {
 }
 
 func getSerialString(s *big.Int) string {
-
 	serial := strings.ToUpper(s.Text(16))
 	if len(serial) == 31 || len(serial) == 1 {
 		serial = "0" + serial
