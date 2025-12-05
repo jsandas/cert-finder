@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"log"
+	"math/big"
 	"net"
 	"os"
 	"strings"
@@ -46,7 +47,7 @@ func (ci *CertificateInfo) Process() error {
 	ci.Subject = ci.Certificate.Subject.CommonName
 	ci.NotBefore = ci.Certificate.NotBefore
 	ci.NotAfter = ci.Certificate.NotAfter
-	ci.SerialNumber = ci.Certificate.SerialNumber.String()
+	ci.SerialNumber = getSerialString(ci.Certificate.SerialNumber)
 
 	hash, err := certificateSha256(ci.Certificate)
 	if err != nil {
@@ -212,4 +213,13 @@ func certificateSha256(cert *x509.Certificate) (string, error) {
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+func getSerialString(s *big.Int) string {
+	serial := strings.ToUpper(s.Text(16))
+	if len(serial) == 31 || len(serial) == 1 {
+		serial = "0" + serial
+	}
+
+	return serial
 }
