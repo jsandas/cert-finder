@@ -293,7 +293,8 @@ func TestCheckCertStatus(t *testing.T) {
 				// Only expect OCSPResponse if the status indicates we received a response
 				if statusWith.OCSPStatus != "" {
 					if statusWith.OCSPResponse == nil {
-						t.Errorf("Expected OCSPResponse to be populated when includeStatusData=true\nand OCSP status present for test %s", tt.name)
+						t.Errorf("Expected OCSPResponse to be populated when includeStatusData=true and OCSP status present for test %s",
+							tt.name)
 					}
 				}
 			}
@@ -303,7 +304,8 @@ func TestCheckCertStatus(t *testing.T) {
 				// Only expect CRLData when we actually fetched a CRL (status Good or Revoked)
 				if strings.HasPrefix(statusWith.CRLStatus, "Good") || strings.HasPrefix(statusWith.CRLStatus, "Revoked") {
 					if statusWith.CRLData == nil {
-						t.Errorf("Expected CRLData to be populated when includeStatusData=true\nand CRL fetched for test %s", tt.name)
+						t.Errorf("Expected CRLData to be populated when includeStatusData=true and CRL fetched for test %s",
+							tt.name)
 					}
 				}
 			}
