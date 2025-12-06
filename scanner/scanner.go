@@ -75,19 +75,31 @@ func (ci *CertificateInfo) Process(
 }
 
 func NewScanner(host, port string) *Scanner {
-	return &Scanner{
-		Host: host,
-		Port: port,
+	s := &Scanner{
+		Host:    host,
+		Port:    port,
+		Timeout: 10 * time.Second,
 	}
+
+	// Default HTTP client using the configured timeout.
+	s.HTTPClient = &http.Client{Timeout: s.Timeout}
+
+	return s
 }
 
 // NewTestScanner creates a scanner that skips STARTTLS for testing.
 func NewTestScanner(host, port string) *Scanner {
-	return &Scanner{
+	s := &Scanner{
 		Host:         host,
 		Port:         port,
 		skipStartTLS: true,
+		Timeout:      10 * time.Second,
 	}
+
+	// Use default HTTP client for tests as well.
+	s.HTTPClient = &http.Client{Timeout: s.Timeout}
+
+	return s
 }
 
 // CheckHost scans a host for TLS certificate information.
