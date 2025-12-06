@@ -103,11 +103,14 @@ func NewTestScanner(host, port string) *Scanner {
 }
 
 // CheckHost scans a host for TLS certificate information.
-func (s *Scanner) CheckHost() error {
+func (s *Scanner) CheckHost(ctx context.Context) error {
 	log.Printf("Starting scanner on port %s", s.Port)
 
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Use caller-provided context; create a default timeout for the operation
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	// Connect to servers
@@ -181,8 +184,12 @@ func (s *Scanner) CheckHost() error {
 }
 
 // CheckPath scans a folder for TLS certificate information.
-func (s *Scanner) CheckPath() error {
+func (s *Scanner) CheckPath(ctx context.Context) error {
 	log.Printf("Starting scanner in path %s", s.Path)
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
 	// search for .pem, .crt, .cer files and parse certificates in a folder
 	files, err := os.ReadDir(s.Path)
@@ -210,7 +217,7 @@ func (s *Scanner) CheckPath() error {
 					Certificate: cert,
 				}
 
-				err := certInfo.Process(context.Background(), s.IncludeStatusData, s.HTTPClient, s.Timeout)
+				err := certInfo.Process(ctx, s.IncludeStatusData, s.HTTPClient, s.Timeout)
 				if err != nil {
 					log.Printf("Failed to process certificate in file %s: %v", filePath, err)
 					continue
