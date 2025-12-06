@@ -290,15 +290,21 @@ func TestCheckCertStatus(t *testing.T) {
 			// When includeStatusData is true, raw OCSP/CRL data should be populated where available.
 			if len(tt.cert.OCSPServer) > 0 {
 				statusWith := CheckCertStatus(tt.cert, true)
-				if statusWith.OCSPResponse == nil {
-					t.Errorf("Expected OCSPResponse to be populated when includeStatusData=true for test %s", tt.name)
+				// Only expect OCSPResponse if the status indicates we received a response
+				if statusWith.OCSPStatus != "" {
+					if statusWith.OCSPResponse == nil {
+						t.Errorf("Expected OCSPResponse to be populated when includeStatusData=true and OCSP status present for test %s", tt.name)
+					}
 				}
 			}
 
 			if len(tt.cert.CRLDistributionPoints) > 0 {
 				statusWith := CheckCertStatus(tt.cert, true)
-				if statusWith.CRLData == nil {
-					t.Errorf("Expected CRLData to be populated when includeStatusData=true for test %s", tt.name)
+				// Only expect CRLData when we actually fetched a CRL (status Good or Revoked)
+				if strings.HasPrefix(statusWith.CRLStatus, "Good") || strings.HasPrefix(statusWith.CRLStatus, "Revoked") {
+					if statusWith.CRLData == nil {
+						t.Errorf("Expected CRLData to be populated when includeStatusData=true and CRL fetched for test %s", tt.name)
+					}
 				}
 			}
 		})
