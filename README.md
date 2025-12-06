@@ -42,7 +42,9 @@ import (
 func main() {
     // Create a scanner for remote host
     s := scanner.NewScanner("example.com", "443")
-    
+    // Optionally exclude raw OCSP/CRL response data to save memory
+    s.IncludeStatusData = false // set to true if you need raw response bytes
+
     // Scan remote host
     err := s.CheckHost()
     if err != nil {
@@ -77,6 +79,8 @@ func main() {
     s := &scanner.Scanner{
         Path: "/path/to/certs",
     }
+    // Optionally include OCSP/CRL raw response data
+    s.IncludeStatusData = false
     
     // Scan directory for certificates
     err := s.CheckPath()

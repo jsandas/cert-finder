@@ -39,10 +39,9 @@ type CertificateInfo struct {
 	SerialNumber string
 	Fingerprint  string
 	Status       *CertStatus
-	scanner      *Scanner
 }
 
-func (ci *CertificateInfo) Process() error {
+func (ci *CertificateInfo) Process(includeStatusData bool) error {
 	ci.Issuer = ci.Certificate.Issuer.CommonName
 	ci.Subject = ci.Certificate.Subject.CommonName
 	ci.NotBefore = ci.Certificate.NotBefore
@@ -56,7 +55,7 @@ func (ci *CertificateInfo) Process() error {
 
 	ci.Fingerprint = hash
 
-	ci.Status = CheckCertStatus(ci.Certificate, ci.scanner.IncludeStatusData)
+	ci.Status = CheckCertStatus(ci.Certificate, includeStatusData)
 
 	return nil
 }
@@ -125,10 +124,9 @@ func (s *Scanner) CheckHost() error {
 
 	s.EntityCertificate = CertificateInfo{
 		Certificate: state.PeerCertificates[0],
-		scanner:     s,
 	}
 
-	err = s.EntityCertificate.Process()
+	err = s.EntityCertificate.Process(s.IncludeStatusData)
 	if err != nil {
 		return fmt.Errorf("failed to process certificate: %v", err)
 	}
@@ -143,10 +141,9 @@ func (s *Scanner) CheckHost() error {
 	for _, cert := range state.PeerCertificates[1:] {
 		chainCert := CertificateInfo{
 			Certificate: cert,
-			scanner:     s,
 		}
 
-		err := chainCert.Process()
+		err := chainCert.Process(s.IncludeStatusData)
 		if err != nil {
 			return fmt.Errorf("failed to process chain certificate: %v", err)
 		}
@@ -185,10 +182,9 @@ func (s *Scanner) CheckPath() error {
 			for _, cert := range certs {
 				certInfo := CertificateInfo{
 					Certificate: cert,
-					scanner:     s,
 				}
 
-				err := certInfo.Process()
+				err := certInfo.Process(s.IncludeStatusData)
 				if err != nil {
 					log.Printf("Failed to process certificate in file %s: %v", filePath, err)
 					continue
