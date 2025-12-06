@@ -141,6 +141,73 @@ Run the test suite:
 go test -v ./...
 ```
 
+## Advanced: configure HTTP client and timeouts
+
+For some users, controlling HTTP behavior when fetching AIA/OCSP/CRL endpoints is important (timeouts, proxies, or custom transports). The `Scanner` exposes `Timeout` and `HTTPClient` so you can configure them before scanning. Additionally, you can call `CheckCertStatus` directly with a `context.Context` and `CheckOptions` when you only need status for a certificate.
+
+Example — configure `Scanner` HTTP client and timeout:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "net/http"
+    "time"
+
+    "github.com/jsandas/cert-finder/scanner"
+)
+
+func main() {
+    s := scanner.NewScanner("example.com", "443")
+
+    // Configure a shorter timeout and a custom HTTP client if desired
+    s.Timeout = 5 * time.Second
+    s.HTTPClient = &http.Client{Timeout: s.Timeout}
+
+    // Control whether raw OCSP/CRL data is stored
+    s.IncludeStatusData = false // set to true if you need OCSPResponse/CRLData
+
+    if err := s.CheckHost(); err != nil {
+        log.Fatalf("scan failed: %v", err)
+    }
+
+    fmt.Printf("Found %d certificates\n", len(s.Certificates))
+}
+```
+
+Example — check a certificate status directly with `CheckOptions`:
+
+```go
+package main
+
+import (
+    "context"
+    "crypto/x509"
+    "fmt"
+    "net/http"
+    "time"
+
+    "github.com/jsandas/cert-finder/scanner"
+)
+
+func main() {
+    // cert is an *x509.Certificate you obtained from file or connection
+    var cert *x509.Certificate
+
+    opts := scanner.CheckOptions{
+        IncludeStatusData: true,
+        HTTPClient:        &http.Client{Timeout: 10 * time.Second},
+        Timeout:           10 * time.Second,
+    }
+
+    status := scanner.CheckCertStatus(context.Background(), cert, opts)
+    fmt.Printf("OCSP status: %s\n", status.OCSPStatus)
+}
+```
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
