@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -22,6 +23,8 @@ type Scanner struct {
 	Host              string
 	Port              string
 	IncludeStatusData bool
+	HTTPClient        *http.Client
+	Timeout           time.Duration
 	Version           string
 	Cipher            string
 	Certificates      []CertificateInfo // All certificates found in file/folder
@@ -41,7 +44,7 @@ type CertificateInfo struct {
 	Status       *CertStatus
 }
 
-func (ci *CertificateInfo) Process(includeStatusData bool) error {
+func (ci *CertificateInfo) Process(ctx context.Context, includeStatusData bool, client *http.Client, timeout time.Duration) error {
 	ci.Issuer = ci.Certificate.Issuer.CommonName
 	ci.Subject = ci.Certificate.Subject.CommonName
 	ci.NotBefore = ci.Certificate.NotBefore
@@ -55,7 +58,13 @@ func (ci *CertificateInfo) Process(includeStatusData bool) error {
 
 	ci.Fingerprint = hash
 
-	ci.Status = CheckCertStatus(ci.Certificate, includeStatusData)
+	opts := CheckOptions{
+		IncludeStatusData: includeStatusData,
+		HTTPClient:        client,
+		Timeout:           timeout,
+	}
+
+	ci.Status = CheckCertStatus(ctx, ci.Certificate, opts)
 
 	return nil
 }
@@ -126,7 +135,7 @@ func (s *Scanner) CheckHost() error {
 		Certificate: state.PeerCertificates[0],
 	}
 
-	err = s.EntityCertificate.Process(s.IncludeStatusData)
+	err = s.EntityCertificate.Process(ctx, s.IncludeStatusData, s.HTTPClient, s.Timeout)
 	if err != nil {
 		return fmt.Errorf("failed to process certificate: %v", err)
 	}
@@ -143,7 +152,7 @@ func (s *Scanner) CheckHost() error {
 			Certificate: cert,
 		}
 
-		err := chainCert.Process(s.IncludeStatusData)
+		err := chainCert.Process(ctx, s.IncludeStatusData, s.HTTPClient, s.Timeout)
 		if err != nil {
 			return fmt.Errorf("failed to process chain certificate: %v", err)
 		}
@@ -184,7 +193,7 @@ func (s *Scanner) CheckPath() error {
 					Certificate: cert,
 				}
 
-				err := certInfo.Process(s.IncludeStatusData)
+				err := certInfo.Process(context.Background(), s.IncludeStatusData, s.HTTPClient, s.Timeout)
 				if err != nil {
 					log.Printf("Failed to process certificate in file %s: %v", filePath, err)
 					continue

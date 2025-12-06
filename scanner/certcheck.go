@@ -32,8 +32,16 @@ type CertStatus struct {
 	CRLData      *x509.RevocationList // List of revoked certificate serial numbers
 }
 
+// CheckOptions holds optional parameters for status checks.
+type CheckOptions struct {
+	IncludeStatusData bool
+	HTTPClient        *http.Client
+	Timeout           time.Duration
+}
+
 // safeHTTPGet performs a GET request with URL validation and context.
-func safeHTTPGet(urlStr string) (*http.Response, error) {
+// safeHTTPGet performs a GET request with URL validation using provided context and client.
+func safeHTTPGet(ctx context.Context, client *http.Client, urlStr string) (*http.Response, error) {
 	// Parse and validate URL
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
@@ -45,20 +53,21 @@ func safeHTTPGet(urlStr string) (*http.Response, error) {
 		return nil, fmt.Errorf("invalid URL scheme %q", parsedURL.Scheme)
 	}
 
-	// Create request with context
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	if client == nil {
+		client = http.DefaultClient
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
-	return http.DefaultClient.Do(req)
+	return client.Do(req)
 }
 
 // safeHTTPPost performs a POST request with URL validation and context.
-func safeHTTPPost(urlStr string, contentType string, body io.Reader) (*http.Response, error) {
+// safeHTTPPost performs a POST request with URL validation using provided context and client.
+func safeHTTPPost(ctx context.Context, client *http.Client, urlStr string, contentType string, body io.Reader) (*http.Response, error) {
 	// Parse and validate URL
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
@@ -70,9 +79,9 @@ func safeHTTPPost(urlStr string, contentType string, body io.Reader) (*http.Resp
 		return nil, fmt.Errorf("invalid URL scheme %q", parsedURL.Scheme)
 	}
 
-	// Create request with context
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	if client == nil {
+		client = http.DefaultClient
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, parsedURL.String(), body)
 	if err != nil {
@@ -81,11 +90,11 @@ func safeHTTPPost(urlStr string, contentType string, body io.Reader) (*http.Resp
 
 	req.Header.Set("Content-Type", contentType)
 
-	return http.DefaultClient.Do(req)
+	return client.Do(req)
 }
 
 // getIssuerCert retrieves the issuer certificate from the AIA extension.
-func getIssuerCert(cert *x509.Certificate) (*x509.Certificate, error) {
+func getIssuerCert(ctx context.Context, client *http.Client, cert *x509.Certificate) (*x509.Certificate, error) {
 	if len(cert.IssuingCertificateURL) == 0 {
 		return nil, fmt.Errorf("no CA issuers found in AIA extension")
 	}
@@ -94,7 +103,7 @@ func getIssuerCert(cert *x509.Certificate) (*x509.Certificate, error) {
 	var lastErr error
 
 	for _, issuerURL := range cert.IssuingCertificateURL {
-		resp, err := safeHTTPGet(issuerURL)
+		resp, err := safeHTTPGet(ctx, client, issuerURL)
 		if err != nil {
 			lastErr = err
 			continue
@@ -135,7 +144,7 @@ func getIssuerCert(cert *x509.Certificate) (*x509.Certificate, error) {
 }
 
 // CheckCertStatus checks Validity and both OCSP and CRL status of a certificate.
-func CheckCertStatus(cert *x509.Certificate, includeStatusData bool) *CertStatus {
+func CheckCertStatus(ctx context.Context, cert *x509.Certificate, opts CheckOptions) *CertStatus {
 	status := &CertStatus{
 		IsValid:     true,
 		LastChecked: time.Now(),
@@ -158,7 +167,7 @@ func CheckCertStatus(cert *x509.Certificate, includeStatusData bool) *CertStatus
 	}
 
 	// Get issuer certificate
-	issuerCert, err := getIssuerCert(cert)
+	issuerCert, err := getIssuerCert(ctx, opts.HTTPClient, cert)
 	if err != nil {
 		status.IsValid = false
 		status.Errors = append(status.Errors, fmt.Sprintf("%s: %v", certUnreachable, err))
@@ -167,13 +176,13 @@ func CheckCertStatus(cert *x509.Certificate, includeStatusData bool) *CertStatus
 	}
 
 	// Check OCSP status
-	err = checkOCSP(cert, issuerCert, status, includeStatusData)
+	err = checkOCSP(ctx, cert, issuerCert, status, opts)
 	if err != nil {
 		status.Errors = append(status.Errors, fmt.Sprintf("%s : %v", certUnreachableOCSP, err))
 	}
 
 	// Check CRL status
-	err = checkCRL(cert, status, includeStatusData)
+	err = checkCRL(ctx, cert, status, opts)
 	if err != nil {
 		status.Errors = append(status.Errors, fmt.Sprintf("%s : %v", certUnreachableCRL, err))
 	}
@@ -199,8 +208,8 @@ func processOCSPResponse(response *ocsp.Response, status *CertStatus, includeSta
 }
 
 // fetchOCSPResponse attempts to get an OCSP response from a server.
-func fetchOCSPResponse(server string, request []byte, issuerCert *x509.Certificate) (*ocsp.Response, error) {
-	resp, err := safeHTTPPost(server, "application/ocsp-request", bytes.NewReader(request))
+func fetchOCSPResponse(ctx context.Context, server string, request []byte, issuerCert *x509.Certificate, client *http.Client) (*ocsp.Response, error) {
+	resp, err := safeHTTPPost(ctx, client, server, "application/ocsp-request", bytes.NewReader(request))
 	if err != nil {
 		return nil, err
 	}
@@ -223,8 +232,8 @@ func fetchOCSPResponse(server string, request []byte, issuerCert *x509.Certifica
 	return ocspResponse, nil
 }
 
-func checkOCSP(cert *x509.Certificate, issuerCert *x509.Certificate, status *CertStatus,
-	includeStatusData bool) error {
+func checkOCSP(ctx context.Context, cert *x509.Certificate, issuerCert *x509.Certificate, status *CertStatus,
+	opts CheckOptions) error {
 	// Skip if no OCSP servers defined
 	if len(cert.OCSPServer) == 0 {
 		status.OCSPStatus = certValidNoOCSP
@@ -238,16 +247,17 @@ func checkOCSP(cert *x509.Certificate, issuerCert *x509.Certificate, status *Cer
 	}
 
 	// Try each OCSP server
+	// Try each OCSP server
 	var lastErr error
 
 	for _, server := range cert.OCSPServer {
-		response, err := fetchOCSPResponse(server, ocspRequest, issuerCert)
+		response, err := fetchOCSPResponse(ctx, server, ocspRequest, issuerCert, opts.HTTPClient)
 		if err != nil {
 			lastErr = err
 			continue
 		}
 
-		processOCSPResponse(response, status, includeStatusData)
+		processOCSPResponse(response, status, opts.IncludeStatusData)
 
 		return nil
 	}
@@ -256,8 +266,8 @@ func checkOCSP(cert *x509.Certificate, issuerCert *x509.Certificate, status *Cer
 }
 
 // fetchCRL retrieves and parses a CRL from the given URL.
-func fetchCRL(crlDP string) (*x509.RevocationList, error) {
-	resp, err := safeHTTPGet(crlDP)
+func fetchCRL(ctx context.Context, client *http.Client, crlDP string) (*x509.RevocationList, error) {
+	resp, err := safeHTTPGet(ctx, client, crlDP)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +318,7 @@ func updateCRLStatus(cert *x509.Certificate, crl *x509.RevocationList, status *C
 	return false
 }
 
-func checkCRL(cert *x509.Certificate, status *CertStatus, includeStatusData bool) error {
+func checkCRL(ctx context.Context, cert *x509.Certificate, status *CertStatus, opts CheckOptions) error {
 	// Skip if no CRL endpoints defined
 	if len(cert.CRLDistributionPoints) == 0 {
 		status.CRLStatus = certNoAIA
@@ -325,7 +335,7 @@ func checkCRL(cert *x509.Certificate, status *CertStatus, includeStatusData bool
 			return nil
 		}
 
-		crl, err := fetchCRL(crlDP)
+		crl, err := fetchCRL(ctx, opts.HTTPClient, crlDP)
 		if err != nil {
 			lastErr = err
 			continue
@@ -338,7 +348,7 @@ func checkCRL(cert *x509.Certificate, status *CertStatus, includeStatusData bool
 		}
 
 		// Update status and check for revocation
-		if updateCRLStatus(cert, crl, status, includeStatusData) {
+		if updateCRLStatus(cert, crl, status, opts.IncludeStatusData) {
 			return nil // Certificate was found in CRL
 		}
 
