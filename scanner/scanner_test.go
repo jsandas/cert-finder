@@ -95,7 +95,7 @@ func TestScanner_CheckHost(t *testing.T) {
 
 	s := NewTestScanner("localhost", port)
 
-	err = s.CheckHost()
+	err = s.CheckHost(context.Background())
 	if err != nil {
 		t.Fatalf("Failed to start scanner: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestScanner_CheckPath(t *testing.T) {
 				Path: tt.path,
 			}
 
-			err := s.CheckPath()
+			err := s.CheckPath(context.Background())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Scanner.CheckPath() error = %v, wantErr %v", err, tt.wantErr)
 				return

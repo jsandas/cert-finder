@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/jsandas/cert-finder/scanner"
@@ -9,7 +10,7 @@ import (
 func main() {
 
 	test := scanner.NewScanner("www.google.com", "443")
-	err := test.CheckHost()
+	err := test.CheckHost(context.Background())
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return

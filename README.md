@@ -46,7 +46,7 @@ func main() {
     s.IncludeStatusData = false // set to true if you need raw response bytes
 
     // Scan remote host
-    err := s.CheckHost()
+    err := s.CheckHost(context.Background())
     if err != nil {
         log.Fatalf("Scan failed: %v", err)
     }
@@ -83,7 +83,7 @@ func main() {
     s.IncludeStatusData = false
     
     // Scan directory for certificates
-    err := s.CheckPath()
+    err := s.CheckPath(context.Background())
     if err != nil {
         log.Fatalf("Scan failed: %v", err)
     }
