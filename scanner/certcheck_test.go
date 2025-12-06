@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -245,7 +246,11 @@ func TestCheckCertStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status := CheckCertStatus(tt.cert, false)
+			status := CheckCertStatus(
+				context.Background(),
+				tt.cert,
+				CheckOptions{IncludeStatusData: false, HTTPClient: http.DefaultClient},
+			)
 			if status.IsValid != tt.wantValid {
 				t.Errorf("CheckCertStatus().IsValid = %v, want %v", status.IsValid, tt.wantValid)
 			}
@@ -289,7 +294,11 @@ func TestCheckCertStatus(t *testing.T) {
 
 			// When includeStatusData is true, raw OCSP/CRL data should be populated where available.
 			if len(tt.cert.OCSPServer) > 0 {
-				statusWith := CheckCertStatus(tt.cert, true)
+				statusWith := CheckCertStatus(
+					context.Background(),
+					tt.cert,
+					CheckOptions{IncludeStatusData: true, HTTPClient: http.DefaultClient},
+				)
 				// Only expect OCSPResponse if the status indicates we received a response
 				if statusWith.OCSPStatus != "" {
 					if statusWith.OCSPResponse == nil {
@@ -300,7 +309,11 @@ func TestCheckCertStatus(t *testing.T) {
 			}
 
 			if len(tt.cert.CRLDistributionPoints) > 0 {
-				statusWith := CheckCertStatus(tt.cert, true)
+				statusWith := CheckCertStatus(
+					context.Background(),
+					tt.cert,
+					CheckOptions{IncludeStatusData: true, HTTPClient: http.DefaultClient},
+				)
 				// Only expect CRLData when we actually fetched a CRL (status Good or Revoked)
 				if strings.HasPrefix(statusWith.CRLStatus, "Good") || strings.HasPrefix(statusWith.CRLStatus, "Revoked") {
 					if statusWith.CRLData == nil {
