@@ -286,6 +286,21 @@ func TestCheckCertStatus(t *testing.T) {
 			}
 
 			// Additional CRL checks can be added here as needed
+
+			// When includeStatusData is true, raw OCSP/CRL data should be populated where available.
+			if len(tt.cert.OCSPServer) > 0 {
+				statusWith := CheckCertStatus(tt.cert, true)
+				if statusWith.OCSPResponse == nil {
+					t.Errorf("Expected OCSPResponse to be populated when includeStatusData=true for test %s", tt.name)
+				}
+			}
+
+			if len(tt.cert.CRLDistributionPoints) > 0 {
+				statusWith := CheckCertStatus(tt.cert, true)
+				if statusWith.CRLData == nil {
+					t.Errorf("Expected CRLData to be populated when includeStatusData=true for test %s", tt.name)
+				}
+			}
 		})
 	}
 }
