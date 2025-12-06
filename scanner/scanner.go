@@ -106,10 +106,7 @@ func NewTestScanner(host, port string) *Scanner {
 func (s *Scanner) CheckHost(ctx context.Context) error {
 	log.Printf("Starting scanner on port %s", s.Port)
 
-	// Use caller-provided context; create a default timeout for the operation
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	// Use caller-provided context and apply an operation timeout
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -187,9 +184,7 @@ func (s *Scanner) CheckHost(ctx context.Context) error {
 func (s *Scanner) CheckPath(ctx context.Context) error {
 	log.Printf("Starting scanner in path %s", s.Path)
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
+	// Use caller-provided context
 
 	// search for .pem, .crt, .cer files and parse certificates in a folder
 	files, err := os.ReadDir(s.Path)
@@ -212,25 +207,32 @@ func (s *Scanner) CheckPath(ctx context.Context) error {
 				continue
 			}
 
-			for _, cert := range certs {
-				certInfo := CertificateInfo{
-					Certificate: cert,
-				}
-
-				err := certInfo.Process(ctx, s.IncludeStatusData, s.HTTPClient, s.Timeout)
-				if err != nil {
-					log.Printf("Failed to process certificate in file %s: %v", filePath, err)
-					continue
-				}
-
-				s.Certificates = append(s.Certificates, certInfo)
-			}
-
-			log.Printf("Parsed certificates from file %s", filePath)
+			s.processCertFile(ctx, filePath, certs)
 		}
 	}
 
 	return nil
+}
+
+// processCertFile processes parsed certificates from a single file and appends
+// them to the scanner's certificate list. Extracted to reduce complexity of
+// CheckPath and make per-file error handling clearer.
+func (s *Scanner) processCertFile(ctx context.Context, filePath string, certs []*x509.Certificate) {
+	for _, cert := range certs {
+		certInfo := CertificateInfo{
+			Certificate: cert,
+		}
+
+		err := certInfo.Process(ctx, s.IncludeStatusData, s.HTTPClient, s.Timeout)
+		if err != nil {
+			log.Printf("Failed to process certificate in file %s: %v", filePath, err)
+			continue
+		}
+
+		s.Certificates = append(s.Certificates, certInfo)
+	}
+
+	log.Printf("Parsed certificates from file %s", filePath)
 }
 
 func certificateSha256(cert *x509.Certificate) (string, error) {

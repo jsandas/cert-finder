@@ -159,6 +159,7 @@ func CheckCertStatus(ctx context.Context, cert *x509.Certificate, opts CheckOpti
 	// If a per-check timeout is provided in options, derive a child context
 	if opts.Timeout > 0 {
 		var cancel context.CancelFunc
+
 		ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
 		defer cancel()
 	}
