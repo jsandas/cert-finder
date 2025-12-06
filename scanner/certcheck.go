@@ -67,7 +67,13 @@ func safeHTTPGet(ctx context.Context, client *http.Client, urlStr string) (*http
 
 // safeHTTPPost performs a POST request with URL validation and context.
 // safeHTTPPost performs a POST request with URL validation using provided context and client.
-func safeHTTPPost(ctx context.Context, client *http.Client, urlStr string, contentType string, body io.Reader) (*http.Response, error) {
+func safeHTTPPost(
+	ctx context.Context,
+	client *http.Client,
+	urlStr string,
+	contentType string,
+	body io.Reader,
+) (*http.Response, error) {
 	// Parse and validate URL
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
@@ -208,7 +214,13 @@ func processOCSPResponse(response *ocsp.Response, status *CertStatus, includeSta
 }
 
 // fetchOCSPResponse attempts to get an OCSP response from a server.
-func fetchOCSPResponse(ctx context.Context, server string, request []byte, issuerCert *x509.Certificate, client *http.Client) (*ocsp.Response, error) {
+func fetchOCSPResponse(
+	ctx context.Context,
+	server string,
+	request []byte,
+	issuerCert *x509.Certificate,
+	client *http.Client,
+) (*ocsp.Response, error) {
 	resp, err := safeHTTPPost(ctx, client, server, "application/ocsp-request", bytes.NewReader(request))
 	if err != nil {
 		return nil, err

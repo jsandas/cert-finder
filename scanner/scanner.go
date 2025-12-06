@@ -44,7 +44,12 @@ type CertificateInfo struct {
 	Status       *CertStatus
 }
 
-func (ci *CertificateInfo) Process(ctx context.Context, includeStatusData bool, client *http.Client, timeout time.Duration) error {
+func (ci *CertificateInfo) Process(
+	ctx context.Context,
+	includeStatusData bool,
+	client *http.Client,
+	timeout time.Duration,
+) error {
 	ci.Issuer = ci.Certificate.Issuer.CommonName
 	ci.Subject = ci.Certificate.Subject.CommonName
 	ci.NotBefore = ci.Certificate.NotBefore
