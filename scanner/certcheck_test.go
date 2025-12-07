@@ -564,3 +564,78 @@ func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	return t.inner.RoundTrip(req)
 }
+
+func TestFetchCRL_PEM(t *testing.T) {
+	// Create a test issuer certificate and key
+	issuerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate issuer key: %v", err)
+	}
+
+	issuerTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:         "Test Issuer CA",
+			Country:            []string{"US"},
+			Organization:       []string{"Test Org"},
+			OrganizationalUnit: []string{"Test Unit"},
+		},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		SubjectKeyId:          []byte{1, 2, 3},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+
+	// Self-sign the issuer certificate
+	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate,
+		issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	if err != nil {
+		t.Fatalf("Failed to create issuer certificate: %v", err)
+	}
+
+	issuerCert, err := x509.ParseCertificate(issuerBytes)
+	if err != nil {
+		t.Fatalf("Failed to parse issuer certificate: %v", err)
+	}
+
+	// Create CRL
+	crlTemplate := &x509.RevocationList{
+		Number:     big.NewInt(1),
+		ThisUpdate: time.Now(),
+		NextUpdate: time.Now().Add(24 * time.Hour),
+	}
+
+	crlDER, err := x509.CreateRevocationList(rand.Reader, crlTemplate, issuerCert, issuerKey)
+	if err != nil {
+		t.Fatalf("Failed to create CRL: %v", err)
+	}
+
+	// Encode CRL in PEM format
+	crlPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "X509 CRL",
+		Bytes: crlDER,
+	})
+
+	// Create HTTP server that serves the PEM-encoded CRL
+	crlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pkix-crl")
+		w.Write(crlPEM)
+	}))
+	defer crlServer.Close()
+
+	// Call fetchCRL
+	ctx := context.Background()
+	client := &http.Client{}
+
+	crl, err := fetchCRL(ctx, client, crlServer.URL)
+	if err != nil {
+		t.Fatalf("fetchCRL failed: %v", err)
+	}
+
+	// Verify the CRL was parsed correctly
+	if crl.Number.Cmp(big.NewInt(1)) != 0 {
+		t.Errorf("Expected CRL number 1, got %s", crl.Number.String())
+	}
+}
