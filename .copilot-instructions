@@ -98,3 +98,8 @@ golangci-lint run --timeout=5m
 - Avoid naked returns; explicitly return values
 - Ensure proper whitespace between logical sections
 - Comment your code clearly, especially exported functions
+
+## Pull Request Guidelines
+
+- If the current PR is too broad, break it into smaller ones (e.g., one for API changes, one for tests).
+- Never commit to or push to the main/master branch.

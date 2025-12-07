@@ -3,6 +3,7 @@
 [![CI](https://github.com/jsandas/cert-finder/actions/workflows/ci.yml/badge.svg)](https://github.com/jsandas/cert-finder/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/jsandas/cert-finder)](https://goreportcard.com/report/github.com/jsandas/cert-finder)
 [![GoDoc](https://godoc.org/github.com/jsandas/cert-finder?status.svg)](https://godoc.org/github.com/jsandas/cert-finder)
+[![codecov](https://codecov.io/gh/jsandas/cert-finder/branch/main/graph/badge.svg)](https://codecov.io/gh/jsandas/cert-finder)
 
 A Go library for retrieving TLS certificate information from remote servers. Built on top of [starttls-go](https://github.com/jsandas/starttls-go) for seamless STARTTLS protocol support.
 
