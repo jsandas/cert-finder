@@ -39,7 +39,6 @@ type CheckOptions struct {
 	Timeout           time.Duration
 }
 
-// httpGet performs a GET request with URL validation and context.
 // httpGet performs a GET request with URL validation using provided context and client.
 func httpGet(ctx context.Context, client *http.Client, urlStr string) (*http.Response, error) {
 	// Parse and validate URL
