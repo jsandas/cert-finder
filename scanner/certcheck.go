@@ -39,9 +39,8 @@ type CheckOptions struct {
 	Timeout           time.Duration
 }
 
-// safeHTTPGet performs a GET request with URL validation and context.
-// safeHTTPGet performs a GET request with URL validation using provided context and client.
-func safeHTTPGet(ctx context.Context, client *http.Client, urlStr string) (*http.Response, error) {
+// httpGet performs a GET request with URL validation using provided context and client.
+func httpGet(ctx context.Context, client *http.Client, urlStr string) (*http.Response, error) {
 	// Parse and validate URL
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
@@ -65,9 +64,8 @@ func safeHTTPGet(ctx context.Context, client *http.Client, urlStr string) (*http
 	return client.Do(req)
 }
 
-// safeHTTPPost performs a POST request with URL validation and context.
-// safeHTTPPost performs a POST request with URL validation using provided context and client.
-func safeHTTPPost(
+// httpPost performs a POST request with URL validation using provided context and client.
+func httpPost(
 	ctx context.Context,
 	client *http.Client,
 	urlStr string,
@@ -109,7 +107,7 @@ func getIssuerCert(ctx context.Context, client *http.Client, cert *x509.Certific
 	var lastErr error
 
 	for _, issuerURL := range cert.IssuingCertificateURL {
-		resp, err := safeHTTPGet(ctx, client, issuerURL)
+		resp, err := httpGet(ctx, client, issuerURL)
 		if err != nil {
 			lastErr = err
 			continue
@@ -229,7 +227,7 @@ func fetchOCSPResponse(
 	issuerCert *x509.Certificate,
 	client *http.Client,
 ) (*ocsp.Response, error) {
-	resp, err := safeHTTPPost(ctx, client, server, "application/ocsp-request", bytes.NewReader(request))
+	resp, err := httpPost(ctx, client, server, "application/ocsp-request", bytes.NewReader(request))
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +285,7 @@ func checkOCSP(ctx context.Context, cert *x509.Certificate, issuerCert *x509.Cer
 
 // fetchCRL retrieves and parses a CRL from the given URL.
 func fetchCRL(ctx context.Context, client *http.Client, crlDP string) (*x509.RevocationList, error) {
-	resp, err := safeHTTPGet(ctx, client, crlDP)
+	resp, err := httpGet(ctx, client, crlDP)
 	if err != nil {
 		return nil, err
 	}
