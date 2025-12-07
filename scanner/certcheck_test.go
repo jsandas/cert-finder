@@ -325,3 +325,175 @@ func TestCheckCertStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckCertStatus_CustomHTTPClient(t *testing.T) {
+	// Create a test issuer certificate and key
+	issuerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate issuer key: %v", err)
+	}
+
+	issuerTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:         "Test Issuer CA",
+			Country:            []string{"US"},
+			Organization:       []string{"Test Org"},
+			OrganizationalUnit: []string{"Test Unit"},
+		},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		SubjectKeyId:          []byte{1, 2, 3},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+
+	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate,
+		issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	if err != nil {
+		t.Fatalf("Failed to create issuer certificate: %v", err)
+	}
+
+	// Setup mock issuer server
+	issuerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+		w.Write(issuerBytes)
+	}))
+	defer issuerServer.Close()
+
+	// Create a custom HTTP client with a transport that tracks requests
+	requestCount := 0
+	customTransport := &testTransport{
+		inner: http.DefaultTransport,
+		onRequest: func(req *http.Request) {
+			requestCount++
+		},
+	}
+	customClient := &http.Client{Transport: customTransport}
+
+	// Create a test certificate that requires AIA fetch
+	cert := &x509.Certificate{
+		SerialNumber: big.NewInt(100),
+		Subject: pkix.Name{
+			CommonName:         "Test Server",
+			Country:            []string{"US"},
+			Organization:       []string{"Test Org"},
+			OrganizationalUnit: []string{"Test Unit"},
+		},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IssuingCertificateURL: []string{issuerServer.URL},
+		AuthorityKeyId:        []byte{1, 2, 3},
+	}
+
+	// Call CheckCertStatus with custom client
+	status := CheckCertStatus(
+		context.Background(),
+		cert,
+		CheckOptions{IncludeStatusData: false, HTTPClient: customClient},
+	)
+
+	// Verify the custom client was used (request count should be > 0)
+	if requestCount == 0 {
+		t.Errorf("Custom HTTP client was not used; expected at least 1 request")
+	}
+
+	// Verify the status is valid (since we provided the issuer)
+	if !status.IsValid {
+		t.Errorf("Expected certificate to be valid, but got errors: %v", status.Errors)
+	}
+}
+
+func TestCheckCertStatus_Timeout(t *testing.T) {
+	// Create a test issuer certificate and key
+	issuerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate issuer key: %v", err)
+	}
+
+	issuerTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:         "Test Issuer CA",
+			Country:            []string{"US"},
+			Organization:       []string{"Test Org"},
+			OrganizationalUnit: []string{"Test Unit"},
+		},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		SubjectKeyId:          []byte{1, 2, 3},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+
+	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate,
+		issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	if err != nil {
+		t.Fatalf("Failed to create issuer certificate: %v", err)
+	}
+
+	// Setup a slow server that delays response
+	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond) // Delay longer than our timeout
+		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+		w.Write(issuerBytes)
+	}))
+	defer slowServer.Close()
+
+	// Create a test certificate that requires AIA fetch
+	cert := &x509.Certificate{
+		SerialNumber: big.NewInt(100),
+		Subject: pkix.Name{
+			CommonName:         "Test Server",
+			Country:            []string{"US"},
+			Organization:       []string{"Test Org"},
+			OrganizationalUnit: []string{"Test Unit"},
+		},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IssuingCertificateURL: []string{slowServer.URL},
+		AuthorityKeyId:        []byte{1, 2, 3},
+	}
+
+	// Call CheckCertStatus with a very short timeout
+	status := CheckCertStatus(
+		context.Background(),
+		cert,
+		CheckOptions{IncludeStatusData: false, HTTPClient: http.DefaultClient, Timeout: 10 * time.Millisecond},
+	)
+
+	// Verify that the call timed out and certificate is invalid due to unreachable issuer
+	if status.IsValid {
+		t.Errorf("Expected certificate to be invalid due to timeout, but it was valid")
+	}
+
+	// Check that we have an error related to unreachable issuer
+	foundUnreachable := false
+
+	for _, err := range status.Errors {
+		if strings.Contains(err, certUnreachable) {
+			foundUnreachable = true
+			break
+		}
+	}
+
+	if !foundUnreachable {
+		t.Errorf("Expected error containing '%s' due to timeout, but got: %v", certUnreachable, status.Errors)
+	}
+}
+
+// testTransport is a custom RoundTripper that tracks requests.
+type testTransport struct {
+	inner     http.RoundTripper
+	onRequest func(*http.Request)
+}
+
+func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.onRequest != nil {
+		t.onRequest(req)
+	}
+
+	return t.inner.RoundTrip(req)
+}
