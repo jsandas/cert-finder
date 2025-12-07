@@ -36,4 +36,10 @@ jobs:
         cache: true
 
     - name: Run unit tests
-      run: make test-unit
+      run: go test -v ./... -coverprofile=coverage.out
+
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage.out
