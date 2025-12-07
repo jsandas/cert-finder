@@ -64,7 +64,6 @@ func httpGet(ctx context.Context, client *http.Client, urlStr string) (*http.Res
 	return client.Do(req)
 }
 
-// httpPost performs a POST request with URL validation and context.
 // httpPost performs a POST request with URL validation using provided context and client.
 func httpPost(
 	ctx context.Context,
