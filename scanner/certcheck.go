@@ -144,7 +144,7 @@ func getIssuerCert(ctx context.Context, client *http.Client, cert *x509.Certific
 		return issuer, nil
 	}
 
-	return nil, fmt.Errorf("%s : %v", certUnreachable, lastErr)
+	return nil, lastErr
 }
 
 // CheckCertStatus checks Validity and both OCSP and CRL status of a certificate.
@@ -183,6 +183,7 @@ func CheckCertStatus(ctx context.Context, cert *x509.Certificate, opts CheckOpti
 	if err != nil {
 		status.IsValid = false
 		status.Errors = append(status.Errors, fmt.Sprintf("%s: %v", certUnreachable, err))
+		status.CRLStatus = certNoAIA
 
 		return status
 	}
