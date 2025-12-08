@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -47,6 +48,45 @@ func TestCheckCertStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create issuer certificate: %v", err)
 	}
+
+	// Create PEM-encoded issuer for testing PEM parsing
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: issuerBytes})
+	pemIssuerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+		w.Write(pemBytes)
+	}))
+
+	defer pemIssuerServer.Close()
+
+	// Create a wrong issuer certificate for testing verification failure
+	wrongKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate wrong issuer key: %v", err)
+	}
+
+	wrongTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject: pkix.Name{
+			CommonName: "Wrong Issuer CA",
+		},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		SubjectKeyId:          []byte{4, 5, 6}, // Different from issuer's {1,2,3}
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+
+	wrongBytes, err := x509.CreateCertificate(rand.Reader, wrongTemplate, wrongTemplate, &wrongKey.PublicKey, wrongKey)
+	if err != nil {
+		t.Fatalf("Failed to create wrong issuer certificate: %v", err)
+	}
+
+	wrongIssuerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+		w.Write(wrongBytes)
+	}))
+	defer wrongIssuerServer.Close()
 
 	// Parse the issuer certificate for later use
 	issuerCert, err := x509.ParseCertificate(issuerBytes)
@@ -142,8 +182,9 @@ func TestCheckCertStatus(t *testing.T) {
 				NotBefore: time.Now().Add(-24 * time.Hour),
 				NotAfter:  time.Now().Add(24 * time.Hour),
 			},
-			wantValid:  false,
-			wantErrors: []string{fmt.Sprintf("%s: no CA issuers found in AIA extension", certUnreachable)},
+			wantValid:     false,
+			wantErrors:    []string{fmt.Sprintf("%s: no CA issuers found in AIA extension", certUnreachable)},
+			wantCRLStatus: certNoAIA,
 		},
 		{
 			name: certUnreachable,
@@ -152,8 +193,9 @@ func TestCheckCertStatus(t *testing.T) {
 				NotAfter:              time.Now().Add(24 * time.Hour),
 				IssuingCertificateURL: []string{"http://invalid.example.com"},
 			},
-			wantValid:  false,
-			wantErrors: []string{certUnreachable},
+			wantValid:     false,
+			wantErrors:    []string{certUnreachable},
+			wantCRLStatus: certNoAIA,
 		},
 		{
 			name: certValidNoOCSP,
@@ -241,6 +283,31 @@ func TestCheckCertStatus(t *testing.T) {
 			wantValid:      true,
 			wantErrors:     []string{certUnreachableCRL},
 			wantOCSPStatus: certValidNoOCSP,
+		},
+		{
+			name: "Issuer certificate in PEM format",
+			cert: &x509.Certificate{
+				NotBefore:             time.Now().Add(-24 * time.Hour),
+				NotAfter:              time.Now().Add(24 * time.Hour),
+				IssuingCertificateURL: []string{pemIssuerServer.URL},
+				AuthorityKeyId:        []byte{1, 2, 3},
+			},
+			wantValid:      true,
+			wantOCSPStatus: certValidNoOCSP,
+			wantCRLStatus:  certNoAIA,
+		},
+		{
+			name: "Retrieved certificate is not the issuer",
+			cert: &x509.Certificate{
+				NotBefore:             time.Now().Add(-24 * time.Hour),
+				NotAfter:              time.Now().Add(24 * time.Hour),
+				IssuingCertificateURL: []string{wrongIssuerServer.URL},
+				AuthorityKeyId:        []byte{1, 2, 3},
+			},
+			wantValid:      false,
+			wantErrors:     []string{fmt.Sprintf("%s: retrieved certificate is not the issuer", certUnreachable)},
+			wantOCSPStatus: "",
+			wantCRLStatus:  certNoAIA,
 		},
 	}
 
@@ -496,4 +563,79 @@ func (t *testTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	return t.inner.RoundTrip(req)
+}
+
+func TestFetchCRL_PEM(t *testing.T) {
+	// Create a test issuer certificate and key
+	issuerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate issuer key: %v", err)
+	}
+
+	issuerTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName:         "Test Issuer CA",
+			Country:            []string{"US"},
+			Organization:       []string{"Test Org"},
+			OrganizationalUnit: []string{"Test Unit"},
+		},
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+		SubjectKeyId:          []byte{1, 2, 3},
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+
+	// Self-sign the issuer certificate
+	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate,
+		issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	if err != nil {
+		t.Fatalf("Failed to create issuer certificate: %v", err)
+	}
+
+	issuerCert, err := x509.ParseCertificate(issuerBytes)
+	if err != nil {
+		t.Fatalf("Failed to parse issuer certificate: %v", err)
+	}
+
+	// Create CRL
+	crlTemplate := &x509.RevocationList{
+		Number:     big.NewInt(1),
+		ThisUpdate: time.Now(),
+		NextUpdate: time.Now().Add(24 * time.Hour),
+	}
+
+	crlDER, err := x509.CreateRevocationList(rand.Reader, crlTemplate, issuerCert, issuerKey)
+	if err != nil {
+		t.Fatalf("Failed to create CRL: %v", err)
+	}
+
+	// Encode CRL in PEM format
+	crlPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "X509 CRL",
+		Bytes: crlDER,
+	})
+
+	// Create HTTP server that serves the PEM-encoded CRL
+	crlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/pkix-crl")
+		w.Write(crlPEM)
+	}))
+	defer crlServer.Close()
+
+	// Call fetchCRL
+	ctx := context.Background()
+	client := &http.Client{}
+
+	crl, err := fetchCRL(ctx, client, crlServer.URL)
+	if err != nil {
+		t.Fatalf("fetchCRL failed: %v", err)
+	}
+
+	// Verify the CRL was parsed correctly
+	if crl.Number.Cmp(big.NewInt(1)) != 0 {
+		t.Errorf("Expected CRL number 1, got %s", crl.Number.String())
+	}
 }
