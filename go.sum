@@ -2,5 +2,5 @@ github.com/jsandas/starttls-go v1.0.1 h1:DTCil8+gxVnJlUfJhmfxJMkw6tdIRNRIwKg4rfX
 github.com/jsandas/starttls-go v1.0.1/go.mod h1:8rDGnKnQzjlklSUrFapPjIruWb32Zi6Mq7sZrJ3XKHs=
 github.com/jsandas/tls-simulator v1.0.1 h1:yP1IJpUjuswZAiIeHl26q7qMal9N4ZmBjbKt2cQKDqY=
 github.com/jsandas/tls-simulator v1.0.1/go.mod h1:RD6MYq+F554qBIryD+kgWtmJqb4v1ENt6Va4BziUNYE=
-golang.org/x/crypto v0.45.0 h1:jMBrvKuj23MTlT0bQEOBcAE0mjg8mK9RXFhRH6nyF3Q=
-golang.org/x/crypto v0.45.0/go.mod h1:XTGrrkGJve7CYK7J8PEww4aY7gM3qMCElcJQ8n8JdX4=
+golang.org/x/crypto v0.46.0 h1:cKRW/pmt1pKAfetfu+RCEvjvZkA9RimPbh7bhFjGVBU=
+golang.org/x/crypto v0.46.0/go.mod h1:Evb/oLKmMraqjZ2iQTwDwvCtJkczlDuTmdJXoZVzqU0=
