@@ -10,14 +10,29 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/ocsp"
 )
+
+func TestMain(m *testing.M) {
+	originalLookup := lookupIPAddr
+	lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}
+
+	exitCode := m.Run()
+	lookupIPAddr = originalLookup
+
+	os.Exit(exitCode)
+}
 
 func TestCheckCertStatus(t *testing.T) {
 	// Create a test issuer certificate and key
@@ -139,6 +154,14 @@ func TestCheckCertStatus(t *testing.T) {
 	}))
 	defer crlServer.Close()
 
+	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
+		"crl.example.test":          crlServer,
+		"issuer.example.test":       issuerServer,
+		"ocsp.example.test":         ocspServer,
+		"pem-issuer.example.test":   pemIssuerServer,
+		"wrong-issuer.example.test": wrongIssuerServer,
+	})
+
 	tests := []struct {
 		name           string
 		cert           *x509.Certificate
@@ -160,7 +183,7 @@ func TestCheckCertStatus(t *testing.T) {
 				},
 				NotBefore:             time.Now().Add(-48 * time.Hour),
 				NotAfter:              time.Now().Add(-24 * time.Hour),
-				IssuingCertificateURL: []string{issuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 			},
 			wantValid:  false,
@@ -171,7 +194,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(24 * time.Hour),
 				NotAfter:              time.Now().Add(48 * time.Hour),
-				IssuingCertificateURL: []string{issuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
 			},
 			wantValid:  false,
 			wantErrors: []string{certNotYetValid},
@@ -202,7 +225,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{issuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 			},
 			wantValid:      true,
@@ -221,9 +244,9 @@ func TestCheckCertStatus(t *testing.T) {
 				},
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{issuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
 				AuthorityKeyId:        []byte{1, 2, 3},
-				OCSPServer:            []string{ocspServer.URL},
+				OCSPServer:            []string{publicURLs["ocsp.example.test"]},
 			},
 			wantValid:      true,
 			wantOCSPStatus: "Good",
@@ -234,9 +257,9 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{issuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
 				AuthorityKeyId:        []byte{1, 2, 3},
-				CRLDistributionPoints: []string{crlServer.URL},
+				CRLDistributionPoints: []string{publicURLs["crl.example.test"]},
 			},
 			wantValid:      true,
 			wantOCSPStatus: certValidNoOCSP,
@@ -247,7 +270,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{issuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 				CRLDistributionPoints: []string{"ldap://example.com/cn=crl"},
 			},
@@ -260,7 +283,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{issuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 				OCSPServer:            []string{"http://invalid.example.com"},
 			},
@@ -276,7 +299,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{issuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 				CRLDistributionPoints: []string{"http://invalid.example.com"},
 			},
@@ -289,7 +312,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{pemIssuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["pem-issuer.example.test"]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 			},
 			wantValid:      true,
@@ -301,7 +324,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{wrongIssuerServer.URL},
+				IssuingCertificateURL: []string{publicURLs["wrong-issuer.example.test"]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 			},
 			wantValid:      false,
@@ -316,7 +339,7 @@ func TestCheckCertStatus(t *testing.T) {
 			status := CheckCertStatus(
 				context.Background(),
 				tt.cert,
-				CheckOptions{IncludeStatusData: false, HTTPClient: http.DefaultClient},
+				CheckOptions{IncludeStatusData: false, HTTPClient: client},
 			)
 			if status.IsValid != tt.wantValid {
 				t.Errorf("CheckCertStatus().IsValid = %v, want %v", status.IsValid, tt.wantValid)
@@ -364,7 +387,7 @@ func TestCheckCertStatus(t *testing.T) {
 				statusWith := CheckCertStatus(
 					context.Background(),
 					tt.cert,
-					CheckOptions{IncludeStatusData: true, HTTPClient: http.DefaultClient},
+					CheckOptions{IncludeStatusData: true, HTTPClient: client},
 				)
 				// Only expect OCSPResponse if the status indicates we received a response
 				if statusWith.OCSPStatus != "" {
@@ -379,7 +402,7 @@ func TestCheckCertStatus(t *testing.T) {
 				statusWith := CheckCertStatus(
 					context.Background(),
 					tt.cert,
-					CheckOptions{IncludeStatusData: true, HTTPClient: http.DefaultClient},
+					CheckOptions{IncludeStatusData: true, HTTPClient: client},
 				)
 				// Only expect CRLData when we actually fetched a CRL (status Good or Revoked)
 				if strings.HasPrefix(statusWith.CRLStatus, "Good") || strings.HasPrefix(statusWith.CRLStatus, "Revoked") {
@@ -429,10 +452,14 @@ func TestCheckCertStatus_CustomHTTPClient(t *testing.T) {
 	}))
 	defer issuerServer.Close()
 
+	routedClient, publicURLs := newMappedTestClient(map[string]*httptest.Server{
+		"issuer.example.test": issuerServer,
+	})
+
 	// Create a custom HTTP client with a transport that tracks requests
 	requestCount := 0
 	customTransport := &testTransport{
-		inner: http.DefaultTransport,
+		inner: routedClient.Transport,
 		onRequest: func(req *http.Request) {
 			requestCount++
 		},
@@ -450,7 +477,7 @@ func TestCheckCertStatus_CustomHTTPClient(t *testing.T) {
 		},
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
-		IssuingCertificateURL: []string{issuerServer.URL},
+		IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
 		AuthorityKeyId:        []byte{1, 2, 3},
 	}
 
@@ -509,6 +536,10 @@ func TestCheckCertStatus_Timeout(t *testing.T) {
 	}))
 	defer slowServer.Close()
 
+	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
+		"slow-issuer.example.test": slowServer,
+	})
+
 	// Create a test certificate that requires AIA fetch
 	cert := &x509.Certificate{
 		SerialNumber: big.NewInt(100),
@@ -520,7 +551,7 @@ func TestCheckCertStatus_Timeout(t *testing.T) {
 		},
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
-		IssuingCertificateURL: []string{slowServer.URL},
+		IssuingCertificateURL: []string{publicURLs["slow-issuer.example.test"]},
 		AuthorityKeyId:        []byte{1, 2, 3},
 	}
 
@@ -528,7 +559,7 @@ func TestCheckCertStatus_Timeout(t *testing.T) {
 	status := CheckCertStatus(
 		context.Background(),
 		cert,
-		CheckOptions{IncludeStatusData: false, HTTPClient: http.DefaultClient, Timeout: 10 * time.Millisecond},
+		CheckOptions{IncludeStatusData: false, HTTPClient: client, Timeout: 10 * time.Millisecond},
 	)
 
 	// Verify that the call timed out and certificate is invalid due to unreachable issuer
@@ -625,11 +656,14 @@ func TestFetchCRL_PEM(t *testing.T) {
 	}))
 	defer crlServer.Close()
 
+	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
+		"crl.example.test": crlServer,
+	})
+
 	// Call fetchCRL
 	ctx := context.Background()
-	client := &http.Client{}
 
-	crl, err := fetchCRL(ctx, client, crlServer.URL)
+	crl, err := fetchCRL(ctx, client, publicURLs["crl.example.test"])
 	if err != nil {
 		t.Fatalf("fetchCRL failed: %v", err)
 	}
@@ -638,4 +672,78 @@ func TestFetchCRL_PEM(t *testing.T) {
 	if crl.Number.Cmp(big.NewInt(1)) != 0 {
 		t.Errorf("Expected CRL number 1, got %s", crl.Number.String())
 	}
+}
+
+func TestCheckCertStatus_BlocksPrivateIssuerAddress(t *testing.T) {
+	originalLookup := lookupIPAddr
+	lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
+		if host == "issuer.example.test" {
+			return []net.IPAddr{{IP: net.IP{127, 0, 0, 1}}}, nil
+		}
+
+		return originalLookup(ctx, host)
+	}
+
+	defer func() {
+		lookupIPAddr = originalLookup
+	}()
+
+	cert := &x509.Certificate{
+		NotBefore:             time.Now().Add(-24 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		IssuingCertificateURL: []string{"http://issuer.example.test/issuer.der"},
+	}
+
+	status := CheckCertStatus(context.Background(), cert, CheckOptions{})
+	if status.IsValid {
+		t.Fatal("expected certificate to be invalid when issuer URL resolves to loopback")
+	}
+
+	found := false
+
+	for _, err := range status.Errors {
+		if strings.Contains(err, "refusing to connect to non-public address") {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Fatalf("expected SSRF protection error, got %v", status.Errors)
+	}
+}
+
+func newMappedTestClient(servers map[string]*httptest.Server) (*http.Client, map[string]string) {
+	hostToAddr := make(map[string]string, len(servers))
+	publicURLs := make(map[string]string, len(servers))
+
+	for host, server := range servers {
+		serverURL, err := url.Parse(server.URL)
+		if err != nil {
+			panic(err)
+		}
+
+		hostToAddr[host] = serverURL.Host
+		serverURL.Host = host
+		publicURLs[host] = serverURL.String()
+	}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+
+		if mappedAddr, ok := hostToAddr[host]; ok {
+			addr = mappedAddr
+		} else if strings.HasSuffix(host, ".example.test") || strings.HasSuffix(host, ".example.com") {
+			return nil, fmt.Errorf("no mapped test server for host %q", host)
+		}
+
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}
+
+	return &http.Client{Transport: transport}, publicURLs
 }

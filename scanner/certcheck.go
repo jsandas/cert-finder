@@ -7,7 +7,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -20,6 +22,8 @@ const (
 	ocspExpired = "OCSP response has expired"
 	crlExpired  = "CRL has expired"
 )
+
+var lookupIPAddr = net.DefaultResolver.LookupIPAddr
 
 // CertStatus represents the validity status of a certificate.
 type CertStatus struct {
@@ -39,21 +43,110 @@ type CheckOptions struct {
 	Timeout           time.Duration
 }
 
-// httpGet performs a GET request with URL validation using provided context and client.
-func httpGet(ctx context.Context, client *http.Client, urlStr string) (*http.Response, error) {
-	// Parse and validate URL
+func validateOutboundURL(ctx context.Context, urlStr string) (*url.URL, error) {
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL %q: %v", urlStr, err)
 	}
 
-	// Ensure scheme is http or https
 	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
 		return nil, fmt.Errorf("invalid URL scheme %q", parsedURL.Scheme)
 	}
 
-	if client == nil {
-		client = http.DefaultClient
+	if parsedURL.User != nil {
+		return nil, fmt.Errorf("URL user info is not allowed")
+	}
+
+	hostname := parsedURL.Hostname()
+	if hostname == "" {
+		return nil, fmt.Errorf("missing URL host")
+	}
+
+	ip, err := netip.ParseAddr(hostname)
+	if err == nil {
+		err = validateOutboundIP(ip.Unmap())
+		if err != nil {
+			return nil, err
+		}
+
+		return parsedURL, nil
+	}
+
+	err = validateResolvedHost(ctx, hostname)
+	if err != nil {
+		return nil, err
+	}
+
+	return parsedURL, nil
+}
+
+func validateResolvedHost(ctx context.Context, hostname string) error {
+	resolvedIPs, err := lookupIPAddr(ctx, hostname)
+	if err != nil {
+		return fmt.Errorf("failed to resolve host %q: %v", hostname, err)
+	}
+
+	if len(resolvedIPs) == 0 {
+		return fmt.Errorf("host %q did not resolve to any address", hostname)
+	}
+
+	return validateResolvedIPs(resolvedIPs)
+}
+
+func validateResolvedIPs(resolvedIPs []net.IPAddr) error {
+	for _, resolvedIP := range resolvedIPs {
+		ip, err := netip.ParseAddr(resolvedIP.IP.String())
+		if err != nil {
+			return fmt.Errorf("failed to parse resolved IP %q: %v", resolvedIP.IP, err)
+		}
+
+		err = validateOutboundIP(ip.Unmap())
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateOutboundIP(ip netip.Addr) error {
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() || ip.IsUnspecified() {
+		return fmt.Errorf("refusing to connect to non-public address %q", ip)
+	}
+
+	return nil
+}
+
+func safeHTTPClient(client *http.Client) *http.Client {
+	baseClient := client
+	if baseClient == nil {
+		baseClient = http.DefaultClient
+	}
+
+	safeClient := *baseClient
+	baseRedirect := baseClient.CheckRedirect
+	safeClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		_, err := validateOutboundURL(req.Context(), req.URL.String())
+		if err != nil {
+			return err
+		}
+
+		if baseRedirect != nil {
+			return baseRedirect(req, via)
+		}
+
+		return nil
+	}
+
+	return &safeClient
+}
+
+// httpGet performs a GET request with URL validation using provided context and client.
+func httpGet(ctx context.Context, client *http.Client, urlStr string) (*http.Response, error) {
+	parsedURL, err := validateOutboundURL(ctx, urlStr)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
@@ -61,7 +154,7 @@ func httpGet(ctx context.Context, client *http.Client, urlStr string) (*http.Res
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
-	return client.Do(req)
+	return safeHTTPClient(client).Do(req) // #nosec G704 URL is validated and restricted to public addresses above.
 }
 
 // httpPost performs a POST request with URL validation using provided context and client.
@@ -72,19 +165,9 @@ func httpPost(
 	contentType string,
 	body io.Reader,
 ) (*http.Response, error) {
-	// Parse and validate URL
-	parsedURL, err := url.Parse(urlStr)
+	parsedURL, err := validateOutboundURL(ctx, urlStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid URL %q: %v", urlStr, err)
-	}
-
-	// Ensure scheme is http or https
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return nil, fmt.Errorf("invalid URL scheme %q", parsedURL.Scheme)
-	}
-
-	if client == nil {
-		client = http.DefaultClient
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, parsedURL.String(), body)
@@ -94,7 +177,7 @@ func httpPost(
 
 	req.Header.Set("Content-Type", contentType)
 
-	return client.Do(req)
+	return safeHTTPClient(client).Do(req) // #nosec G704 URL is validated and restricted to public addresses above.
 }
 
 // getIssuerCert retrieves the issuer certificate from the AIA extension.
