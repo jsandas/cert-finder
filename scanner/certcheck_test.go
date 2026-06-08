@@ -22,6 +22,13 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
+var testCertSubject = pkix.Name{
+	CommonName:         "Test Server",
+	Country:            []string{"US"},
+	Organization:       []string{"Test Org"},
+	OrganizationalUnit: []string{"Test Unit"},
+}
+
 func TestMain(m *testing.M) {
 	originalLookup := lookupIPAddr
 	lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
@@ -42,13 +49,8 @@ func TestCheckCertStatus(t *testing.T) {
 	}
 
 	issuerTemplate := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName:         "Test Issuer CA",
-			Country:            []string{"US"},
-			Organization:       []string{"Test Org"},
-			OrganizationalUnit: []string{"Test Unit"},
-		},
+		SerialNumber:          big.NewInt(1),
+		Subject:               testCertSubject,
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
@@ -174,13 +176,8 @@ func TestCheckCertStatus(t *testing.T) {
 		{
 			name: certExpired,
 			cert: &x509.Certificate{
-				SerialNumber: big.NewInt(100),
-				Subject: pkix.Name{
-					CommonName:         "Test Server",
-					Country:            []string{"US"},
-					Organization:       []string{"Test Org"},
-					OrganizationalUnit: []string{"Test Unit"},
-				},
+				SerialNumber:          big.NewInt(100),
+				Subject:               testCertSubject,
 				NotBefore:             time.Now().Add(-48 * time.Hour),
 				NotAfter:              time.Now().Add(-24 * time.Hour),
 				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
@@ -235,13 +232,8 @@ func TestCheckCertStatus(t *testing.T) {
 		{
 			name: certValidWithOCSP,
 			cert: &x509.Certificate{
-				SerialNumber: big.NewInt(100),
-				Subject: pkix.Name{
-					CommonName:         "Test Server",
-					Country:            []string{"US"},
-					Organization:       []string{"Test Org"},
-					OrganizationalUnit: []string{"Test Unit"},
-				},
+				SerialNumber:          big.NewInt(100),
+				Subject:               testCertSubject,
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
 				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
@@ -424,13 +416,8 @@ func TestCheckCertStatus_CustomHTTPClient(t *testing.T) {
 	}
 
 	issuerTemplate := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName:         "Test Issuer CA",
-			Country:            []string{"US"},
-			Organization:       []string{"Test Org"},
-			OrganizationalUnit: []string{"Test Unit"},
-		},
+		SerialNumber:          big.NewInt(1),
+		Subject:               testCertSubject,
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
@@ -468,13 +455,8 @@ func TestCheckCertStatus_CustomHTTPClient(t *testing.T) {
 
 	// Create a test certificate that requires AIA fetch
 	cert := &x509.Certificate{
-		SerialNumber: big.NewInt(100),
-		Subject: pkix.Name{
-			CommonName:         "Test Server",
-			Country:            []string{"US"},
-			Organization:       []string{"Test Org"},
-			OrganizationalUnit: []string{"Test Unit"},
-		},
+		SerialNumber:          big.NewInt(100),
+		Subject:               testCertSubject,
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
@@ -507,13 +489,8 @@ func TestCheckCertStatus_Timeout(t *testing.T) {
 	}
 
 	issuerTemplate := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName:         "Test Issuer CA",
-			Country:            []string{"US"},
-			Organization:       []string{"Test Org"},
-			OrganizationalUnit: []string{"Test Unit"},
-		},
+		SerialNumber:          big.NewInt(1),
+		Subject:               testCertSubject,
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
@@ -542,13 +519,8 @@ func TestCheckCertStatus_Timeout(t *testing.T) {
 
 	// Create a test certificate that requires AIA fetch
 	cert := &x509.Certificate{
-		SerialNumber: big.NewInt(100),
-		Subject: pkix.Name{
-			CommonName:         "Test Server",
-			Country:            []string{"US"},
-			Organization:       []string{"Test Org"},
-			OrganizationalUnit: []string{"Test Unit"},
-		},
+		SerialNumber:          big.NewInt(100),
+		Subject:               testCertSubject,
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		IssuingCertificateURL: []string{publicURLs["slow-issuer.example.test"]},
@@ -604,13 +576,8 @@ func TestFetchCRL_PEM(t *testing.T) {
 	}
 
 	issuerTemplate := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName:         "Test Issuer CA",
-			Country:            []string{"US"},
-			Organization:       []string{"Test Org"},
-			OrganizationalUnit: []string{"Test Unit"},
-		},
+		SerialNumber:          big.NewInt(1),
+		Subject:               testCertSubject,
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
