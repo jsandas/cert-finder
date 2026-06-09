@@ -22,6 +22,12 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
+const (
+	issuerCommonName = "issuer.example.test"
+	ocspCommonName   = "ocsp.example.test"
+	aiaUrl           = "http://invalid.example.com"
+)
+
 var testCertSubject = pkix.Name{
 	CommonName:         "Test Server",
 	Country:            []string{"US"},
@@ -158,8 +164,8 @@ func TestCheckCertStatus(t *testing.T) {
 
 	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
 		"crl.example.test":          crlServer,
-		"issuer.example.test":       issuerServer,
-		"ocsp.example.test":         ocspServer,
+		issuerCommonName:            issuerServer,
+		ocspCommonName:              ocspServer,
 		"pem-issuer.example.test":   pemIssuerServer,
 		"wrong-issuer.example.test": wrongIssuerServer,
 	})
@@ -180,7 +186,7 @@ func TestCheckCertStatus(t *testing.T) {
 				Subject:               testCertSubject,
 				NotBefore:             time.Now().Add(-48 * time.Hour),
 				NotAfter:              time.Now().Add(-24 * time.Hour),
-				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+				IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 			},
 			wantValid:  false,
@@ -191,7 +197,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(24 * time.Hour),
 				NotAfter:              time.Now().Add(48 * time.Hour),
-				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+				IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 			},
 			wantValid:  false,
 			wantErrors: []string{certNotYetValid},
@@ -211,7 +217,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{"http://invalid.example.com"},
+				IssuingCertificateURL: []string{aiaUrl},
 			},
 			wantValid:     false,
 			wantErrors:    []string{certUnreachable},
@@ -222,7 +228,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+				IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 			},
 			wantValid:      true,
@@ -236,9 +242,9 @@ func TestCheckCertStatus(t *testing.T) {
 				Subject:               testCertSubject,
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+				IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 				AuthorityKeyId:        []byte{1, 2, 3},
-				OCSPServer:            []string{publicURLs["ocsp.example.test"]},
+				OCSPServer:            []string{publicURLs[ocspCommonName]},
 			},
 			wantValid:      true,
 			wantOCSPStatus: "Good",
@@ -249,7 +255,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+				IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 				CRLDistributionPoints: []string{publicURLs["crl.example.test"]},
 			},
@@ -262,7 +268,7 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+				IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 				AuthorityKeyId:        []byte{1, 2, 3},
 				CRLDistributionPoints: []string{"ldap://example.com/cn=crl"},
 			},
@@ -275,9 +281,9 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+				IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 				AuthorityKeyId:        []byte{1, 2, 3},
-				OCSPServer:            []string{"http://invalid.example.com"},
+				OCSPServer:            []string{aiaUrl},
 			},
 			wantValid: true,
 			wantErrors: []string{
@@ -291,9 +297,9 @@ func TestCheckCertStatus(t *testing.T) {
 			cert: &x509.Certificate{
 				NotBefore:             time.Now().Add(-24 * time.Hour),
 				NotAfter:              time.Now().Add(24 * time.Hour),
-				IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+				IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 				AuthorityKeyId:        []byte{1, 2, 3},
-				CRLDistributionPoints: []string{"http://invalid.example.com"},
+				CRLDistributionPoints: []string{aiaUrl},
 			},
 			wantValid:      true,
 			wantErrors:     []string{certUnreachableCRL},
