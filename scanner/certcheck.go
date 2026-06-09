@@ -19,8 +19,11 @@ import (
 
 // Additional certificate validation error constants.
 const (
-	ocspExpired = "OCSP response has expired"
-	crlExpired  = "CRL has expired"
+	ocspExpired       = "OCSP response has expired"
+	crlExpired        = "CRL has expired"
+	ocspStatusUnknown = "Unknown"
+	ocspStatusGood    = "Good"
+	crlStatusGood     = "Good"
 )
 
 var lookupIPAddr = net.DefaultResolver.LookupIPAddr
@@ -294,12 +297,12 @@ func processOCSPResponse(response *ocsp.Response, status *CertStatus, includeSta
 
 	switch response.Status {
 	case ocsp.Good:
-		status.OCSPStatus = "Good"
+		status.OCSPStatus = ocspStatusGood
 	case ocsp.Revoked:
 		status.OCSPStatus = fmt.Sprintf("Revoked at %s", response.RevokedAt)
 		status.IsValid = false
 	case ocsp.Unknown:
-		status.OCSPStatus = "Unknown"
+		status.OCSPStatus = ocspStatusUnknown
 	}
 }
 
@@ -415,7 +418,7 @@ func updateCRLStatus(cert *x509.Certificate, crl *x509.RevocationList, status *C
 		}
 	}
 
-	status.CRLStatus = "Good"
+	status.CRLStatus = crlStatusGood
 
 	return false
 }
