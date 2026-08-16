@@ -25,9 +25,12 @@ import (
 )
 
 const (
-	issuerCommonName = "issuer.example.test"
-	ocspCommonName   = "ocsp.example.test"
-	aiaUrl           = "http://invalid.example.com"
+	issuerCommonName       = "issuer.example.test"
+	ocspCommonName         = "ocsp.example.test"
+	crlCommonName          = "crl.example.test"
+	aiaUrl                 = "http://invalid.example.com"
+	testCaseInvalidDERCert = "invalid-der"
+	invalidURLScheme       = "invalid URL scheme"
 )
 
 var testCertSubject = pkix.Name{
@@ -170,7 +173,7 @@ func TestCheckCertStatus(t *testing.T) {
 	defer crlServer.Close()
 
 	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
-		"crl.example.test":          crlServer,
+		crlCommonName:               crlServer,
 		issuerCommonName:            issuerServer,
 		ocspCommonName:              ocspServer,
 		"pem-issuer.example.test":   pemIssuerServer,
@@ -264,7 +267,7 @@ func TestCheckCertStatus(t *testing.T) {
 				NotAfter:              time.Now().Add(24 * time.Hour),
 				IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 				AuthorityKeyId:        []byte{1, 2, 3},
-				CRLDistributionPoints: []string{publicURLs["crl.example.test"]},
+				CRLDistributionPoints: []string{publicURLs[crlCommonName]},
 			},
 			wantValid:      true,
 			wantOCSPStatus: certValidNoOCSP,
@@ -456,7 +459,7 @@ func TestCheckCertStatus_CustomHTTPClient(t *testing.T) {
 	defer issuerServer.Close()
 
 	routedClient, publicURLs := newMappedTestClient(map[string]*httptest.Server{
-		"issuer.example.test": issuerServer,
+		issuerCommonName: issuerServer,
 	})
 
 	// Create a custom HTTP client with a transport that tracks requests
@@ -475,7 +478,7 @@ func TestCheckCertStatus_CustomHTTPClient(t *testing.T) {
 		Subject:               testCertSubject,
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
-		IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+		IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 		AuthorityKeyId:        []byte{1, 2, 3},
 	}
 
@@ -646,13 +649,13 @@ func TestFetchCRL_PEM(t *testing.T) {
 	defer crlServer.Close()
 
 	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
-		"crl.example.test": crlServer,
+		crlCommonName: crlServer,
 	})
 
 	// Call fetchCRL
 	ctx := context.Background()
 
-	crl, err := fetchCRL(ctx, client, publicURLs["crl.example.test"])
+	crl, err := fetchCRL(ctx, client, publicURLs[crlCommonName])
 	if err != nil {
 		t.Fatalf("fetchCRL failed: %v", err)
 	}
@@ -669,7 +672,7 @@ func TestFetchCRL_PEM(t *testing.T) {
 func TestCheckCertStatus_BlocksPrivateIssuerAddress(t *testing.T) {
 	originalLookup := lookupIPAddr
 	lookupIPAddr = func(ctx context.Context, host string) ([]net.IPAddr, error) {
-		if host == "issuer.example.test" {
+		if host == issuerCommonName {
 			return []net.IPAddr{{IP: net.IP{127, 0, 0, 1}}}, nil
 		}
 
@@ -717,12 +720,12 @@ func TestValidateOutboundURL_ErrorCases(t *testing.T) {
 		{
 			name:    "invalid scheme",
 			urlStr:  "ftp://example.com/cert.der",
-			wantErr: "invalid URL scheme",
+			wantErr: invalidURLScheme,
 		},
 		{
 			name:    "file scheme",
 			urlStr:  "file:///etc/ssl/cert.der",
-			wantErr: "invalid URL scheme",
+			wantErr: invalidURLScheme,
 		},
 		{
 			name:    "url with user info",
@@ -752,7 +755,7 @@ func TestValidateOutboundURL_ErrorCases(t *testing.T) {
 		{
 			name:    "ip address scheme",
 			urlStr:  "ssh://example.com/cert.der",
-			wantErr: "invalid URL scheme",
+			wantErr: invalidURLScheme,
 		},
 	}
 
@@ -934,7 +937,7 @@ func TestGetIssuerCert_ErrorCases(t *testing.T) {
 			wantErr: "",
 		},
 		{
-			name: "server returns invalid DER",
+			name: testCaseInvalidDERCert,
 			cert: &x509.Certificate{
 				IssuingCertificateURL: []string{"http://invalid-der.example.com/cert.der"},
 			},
@@ -954,7 +957,7 @@ func TestGetIssuerCert_ErrorCases(t *testing.T) {
 				return
 			}
 
-			if tt.wantErr == "" && tt.name == "server returns invalid DER" {
+			if tt.wantErr == "" && tt.name == testCaseInvalidDERCert {
 				// We need a server that returns garbage
 				return
 			}
@@ -1040,7 +1043,7 @@ func TestFetchOCSPResponse_ErrorCases(t *testing.T) {
 	}
 
 	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
-		"ocsp.example.test": httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ocspCommonName: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("not an ocsp response"))
 		})),
 		"expired-ocsp.example.test": httptest.NewServer(expiredOCSPHandler(issuerCert, issuerKey)),
@@ -1156,7 +1159,7 @@ func TestFetchCRL_ErrorCases(t *testing.T) {
 		server http.HandlerFunc
 	}{
 		{
-			name:   "server returns invalid DER",
+			name:   testCaseInvalidDERCert,
 			server: func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("not a crl")) },
 		},
 		{
@@ -1214,13 +1217,13 @@ func TestCheckCRL_AllServersFail(t *testing.T) {
 	defer issuerServer.Close()
 
 	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
-		"issuer.example.test": issuerServer,
+		issuerCommonName: issuerServer,
 	})
 
 	cert := &x509.Certificate{
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
-		IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+		IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 		AuthorityKeyId:        []byte{1, 2, 3},
 		CRLDistributionPoints: []string{"http://nonexistent-crl.invalid.example.com/crl.der"},
 	}
@@ -1299,16 +1302,16 @@ func TestCheckCRL_ExpiredCRL(t *testing.T) {
 	defer crlServer.Close()
 
 	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
-		"issuer.example.test": issuerServer,
-		"crl.example.test":    crlServer,
+		issuerCommonName: issuerServer,
+		crlCommonName:    crlServer,
 	})
 
 	cert := &x509.Certificate{
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
-		IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+		IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 		AuthorityKeyId:        []byte{1, 2, 3},
-		CRLDistributionPoints: []string{publicURLs["crl.example.test"]},
+		CRLDistributionPoints: []string{publicURLs[crlCommonName]},
 	}
 
 	status := CheckCertStatus(context.Background(), cert, CheckOptions{HTTPClient: client})
@@ -1469,15 +1472,15 @@ func TestCheckCertStatus_OCSPRevoked(t *testing.T) {
 	defer issuerServer.Close()
 
 	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
-		"issuer.example.test": issuerServer,
-		"ocsp.example.test":   ocspServer,
+		issuerCommonName:    issuerServer,
+		"ocsp.example.test": ocspServer,
 	})
 
 	cert := &x509.Certificate{
 		SerialNumber:          big.NewInt(100),
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
-		IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+		IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 		AuthorityKeyId:        []byte{1, 2, 3},
 		OCSPServer:            []string{publicURLs["ocsp.example.test"]},
 	}
@@ -1561,15 +1564,15 @@ func TestCheckCertStatus_OCSPUnknown(t *testing.T) {
 	defer issuerServer.Close()
 
 	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
-		"issuer.example.test": issuerServer,
-		"ocsp.example.test":   ocspServer,
+		issuerCommonName:    issuerServer,
+		"ocsp.example.test": ocspServer,
 	})
 
 	cert := &x509.Certificate{
 		SerialNumber:          big.NewInt(100),
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
-		IssuingCertificateURL: []string{publicURLs["issuer.example.test"]},
+		IssuingCertificateURL: []string{publicURLs[issuerCommonName]},
 		AuthorityKeyId:        []byte{1, 2, 3},
 		OCSPServer:            []string{publicURLs["ocsp.example.test"]},
 	}
