@@ -1677,7 +1677,12 @@ func TestSafeHTTPClient_NoRedirect(t *testing.T) {
 	client := safeHTTPClient(http.DefaultClient)
 
 	// Try to follow redirect to private IP - should fail
-	_, err := client.Get(server.URL + "/redirect")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/redirect", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = client.Do(req)
 	if err == nil {
 		t.Fatal("Expected error when redirecting to private IP, got nil")
 	}
