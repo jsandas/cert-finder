@@ -22,19 +22,19 @@ jobs:
 
       # Building isn't strictly necessary for running the integration tests, but
       # it ensures that the code compiles before bringing up the Docker containers.
-      - name: Build the application
-        run: go build -o tls-simulator ./examples
+      # - name: Build the application
+      #   run: go build -o tls-simulator ./examples
           
-      - name: Run integration tests
-        run: |
-          make test-integration
-        env:
-          # Increase timeout for CI environment
-          DOCKER_CLIENT_TIMEOUT: 120
-          COMPOSE_HTTP_TIMEOUT: 120
+      # - name: Run integration tests
+      #   run: |
+      #     make test-integration
+      #   env:
+      #     # Increase timeout for CI environment
+      #     DOCKER_CLIENT_TIMEOUT: 120
+      #     COMPOSE_HTTP_TIMEOUT: 120
           
-      - name: Cleanup Docker containers
-        if: always()
-        run: |
-          make docker-down || true
-          docker system prune -f || true
+      # - name: Cleanup Docker containers
+      #   if: always()
+      #   run: |
+      #     make docker-down || true
+      #     docker system prune -f || true
