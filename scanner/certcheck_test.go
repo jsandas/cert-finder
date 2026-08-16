@@ -906,7 +906,8 @@ func TestGetIssuerCert_ErrorCases(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	issuerBytes, err := x509.CreateCertificate(rand.Reader,
+		issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
@@ -1022,7 +1023,8 @@ func TestFetchOCSPResponse_ErrorCases(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	issuerBytes, err := x509.CreateCertificate(rand.Reader,
+		issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
@@ -1112,7 +1114,8 @@ func expiredOCSPHandler(issuerCert, issuerKey interface{}) http.HandlerFunc {
 			NextUpdate:   time.Now().Add(-1 * time.Hour),
 		}
 
-		respBytes, err := ocsp.CreateResponse(issuerCert.(*x509.Certificate), issuerCert.(*x509.Certificate), template, issuerKey.(*ecdsa.PrivateKey))
+		respBytes, err := ocsp.CreateResponse(issuerCert.(*x509.Certificate),
+			issuerCert.(*x509.Certificate), template, issuerKey.(*ecdsa.PrivateKey))
 		if err != nil {
 			http.Error(w, "create error", http.StatusInternalServerError)
 			return
@@ -1140,7 +1143,8 @@ func TestFetchCRL_ErrorCases(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate,
+		issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
