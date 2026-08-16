@@ -1,0 +1,40 @@
+name: Integration
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Finder Integration Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      # Building isn't strictly necessary for running the integration tests, but
+      # it ensures that the code compiles before bringing up the Docker containers.
+      # - name: Build the application
+      #   run: go build -o tls-simulator ./examples
+          
+      # - name: Run integration tests
+      #   run: |
+      #     make test-integration
+      #   env:
+      #     # Increase timeout for CI environment
+      #     DOCKER_CLIENT_TIMEOUT: 120
+      #     COMPOSE_HTTP_TIMEOUT: 120
+          
+      # - name: Cleanup Docker containers
+      #   if: always()
+      #   run: |
+      #     make docker-down || true
+      #     docker system prune -f || true
