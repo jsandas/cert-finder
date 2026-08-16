@@ -1199,7 +1199,8 @@ func TestCheckCRL_AllServersFail(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	issuerBytes, err := x509.CreateCertificate(rand.Reader,
+		issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
@@ -1263,7 +1264,8 @@ func TestCheckCRL_ExpiredCRL(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	issuerBytes, err := x509.CreateCertificate(rand.Reader,
+		issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
@@ -1343,7 +1345,8 @@ func TestUpdateCRLStatus_CertRevoked(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	issuerBytes, err := x509.CreateCertificate(rand.Reader,
+		issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
@@ -1416,7 +1419,8 @@ func TestCheckCertStatus_OCSPRevoked(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	issuerBytes, err := x509.CreateCertificate(rand.Reader,
+		issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
@@ -1508,7 +1512,8 @@ func TestCheckCertStatus_OCSPUnknown(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	issuerBytes, err := x509.CreateCertificate(rand.Reader,
+		issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
@@ -1594,7 +1599,8 @@ func TestCheckCertStatus_IPAddressURL(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
+	issuerBytes, err := x509.CreateCertificate(rand.Reader,
+		issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
