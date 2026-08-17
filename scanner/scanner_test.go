@@ -269,7 +269,9 @@ func TestScanner_CheckHost_SingleCertificate_NoChain(t *testing.T) {
 			tlsConn := tls.Server(conn, config)
 
 			err = tlsConn.HandshakeContext(ctx)
+
 			cancel()
+
 			if err != nil {
 				tlsConn.Close()
 				return

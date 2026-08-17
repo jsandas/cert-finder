@@ -1614,7 +1614,7 @@ func TestCheckCertStatus_IPAddressURL(t *testing.T) {
 		IsCA:         true,
 	}
 
-	issuerBytes, err := x509.CreateCertificate(rand.Reader,
+	_, err = x509.CreateCertificate(rand.Reader,
 		issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
 	if err != nil {
 		t.Fatalf("Failed to create issuer: %v", err)
@@ -1625,7 +1625,7 @@ func TestCheckCertStatus_IPAddressURL(t *testing.T) {
 	cert := &x509.Certificate{
 		NotBefore:             time.Now().Add(-24 * time.Hour),
 		NotAfter:              time.Now().Add(24 * time.Hour),
-		IssuingCertificateURL: []string{publicURL},
+		IssuingCertificateURL: []string{"http://127.0.0.1/cert"},
 	}
 
 	status := CheckCertStatus(context.Background(), cert, CheckOptions{})
@@ -1645,31 +1645,6 @@ func TestCheckCertStatus_IPAddressURL(t *testing.T) {
 	if !found {
 		t.Fatalf("Expected SSRF protection error, got: %v", status.Errors)
 	}
-}
-
-func setupIPMappedServer(issuerBytes []byte) (*big.Int, *httptest.Server, string) {
-	issuerKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	issuerTemplate := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      testCertSubject,
-		NotBefore:    time.Now().Add(-24 * time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
-		KeyUsage:     x509.KeyUsageCertSign,
-		IsCA:         true,
-	}
-	ib, _ := x509.CreateCertificate(rand.Reader, issuerTemplate, issuerTemplate, &issuerKey.PublicKey, issuerKey)
-	_ = ib
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
-		w.Write(issuerBytes)
-	}))
-
-	// Parse server URL to get IP
-	u, _ := url.Parse(server.URL)
-	host, port, _ := net.SplitHostPort(u.Host)
-	ipURL := (&url.URL{Scheme: u.Scheme, Host: net.JoinHostPort(host, port), Path: "/cert.der"}).String()
-	return big.NewInt(1), server, ipURL
 }
 
 // TestSafeHTTPClient_NoRedirect verifies that safeHTTPClient prevents HTTP redirects to private
