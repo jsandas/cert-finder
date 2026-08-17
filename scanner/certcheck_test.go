@@ -745,7 +745,7 @@ func TestValidateOutboundURL_ErrorCases(t *testing.T) {
 		{
 			name:    "empty url",
 			urlStr:  "",
-			wantErr: "invalid URL",
+			wantErr: invalidURLScheme,
 		},
 		{
 			name:    "invalid url syntax",
@@ -958,7 +958,10 @@ func TestGetIssuerCert_ErrorCases(t *testing.T) {
 			}
 
 			if tt.wantErr == "" && tt.name == testCaseInvalidDERCert {
-				// We need a server that returns garbage
+				if err == nil {
+					t.Fatal("Expected error for invalid DER issuer, got nil")
+				}
+
 				return
 			}
 
@@ -1042,14 +1045,23 @@ func TestFetchOCSPResponse_ErrorCases(t *testing.T) {
 		t.Fatalf("Failed to create OCSP request: %v", err)
 	}
 
+	nonOCSPServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not an ocsp response"))
+	}))
+	t.Cleanup(nonOCSPServer.Close)
+
+	expiredOCSPServer := httptest.NewServer(expiredOCSPHandler(issuerCert, issuerKey))
+	t.Cleanup(expiredOCSPServer.Close)
+
+	truncatedOCSPServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte{1, 2, 3})
+	}))
+	t.Cleanup(truncatedOCSPServer.Close)
+
 	client, publicURLs := newMappedTestClient(map[string]*httptest.Server{
-		ocspCommonName: httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte("not an ocsp response"))
-		})),
-		"expired-ocsp.example.test": httptest.NewServer(expiredOCSPHandler(issuerCert, issuerKey)),
-		"truncated-ocsp.example.test": httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte{1, 2, 3})
-		})),
+		ocspCommonName:                nonOCSPServer,
+		"expired-ocsp.example.test":   expiredOCSPServer,
+		"truncated-ocsp.example.test": truncatedOCSPServer,
 	})
 
 	tests := []struct {
@@ -1608,9 +1620,7 @@ func TestCheckCertStatus_IPAddressURL(t *testing.T) {
 		t.Fatalf("Failed to create issuer: %v", err)
 	}
 
-	// Use an IP-based URL (non-private IP)
-	_, server, publicURL := setupIPMappedServer(issuerBytes)
-	defer server.Close()
+	// Use an IP-based URL (loopback/private IP) to ensure SSRF protection triggers before any network request.
 
 	cert := &x509.Certificate{
 		NotBefore:             time.Now().Add(-24 * time.Hour),
@@ -1657,9 +1667,8 @@ func setupIPMappedServer(issuerBytes []byte) (*big.Int, *httptest.Server, string
 
 	// Parse server URL to get IP
 	u, _ := url.Parse(server.URL)
-	host, _, _ := net.SplitHostPort(u.Host)
-	ipURL := fmt.Sprintf("http://%s/cert.der", host)
-
+	host, port, _ := net.SplitHostPort(u.Host)
+	ipURL := (&url.URL{Scheme: u.Scheme, Host: net.JoinHostPort(host, port), Path: "/cert.der"}).String()
 	return big.NewInt(1), server, ipURL
 }
 

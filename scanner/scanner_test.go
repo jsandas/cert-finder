@@ -230,11 +230,11 @@ func TestScanner_CheckPath(t *testing.T) {
 	}
 }
 
-// TestScanner_CheckHost_MultipleCertificates verifies that CheckHost correctly handles a TLS
+// TestScanner_CheckHost_SingleCertificate_NoChain verifies that CheckHost correctly handles a TLS
 // server that presents a single certificate (no chain). It confirms the entity certificate is
 // captured with its fingerprint, while ChainCertificates remains empty since no intermediates
 // were provided by the server.
-func TestScanner_CheckHost_MultipleCertificates(t *testing.T) {
+func TestScanner_CheckHost_SingleCertificate_NoChain(t *testing.T) {
 	cert, err := tls.LoadX509KeyPair("testdata/server.crt", "testdata/server.key")
 	if err != nil {
 		t.Skip("Skipping test: test certificates not available")
@@ -256,10 +256,10 @@ func TestScanner_CheckHost_MultipleCertificates(t *testing.T) {
 	go func() {
 		for {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
 
 			conn, err := listener.Accept()
 			if err != nil {
+				cancel()
 				return
 			}
 
@@ -269,6 +269,7 @@ func TestScanner_CheckHost_MultipleCertificates(t *testing.T) {
 			tlsConn := tls.Server(conn, config)
 
 			err = tlsConn.HandshakeContext(ctx)
+			cancel()
 			if err != nil {
 				tlsConn.Close()
 				return
@@ -401,8 +402,7 @@ func TestScanner_CheckHost_STARTTLSPath(t *testing.T) {
 
 	err = s.CheckHost(context.Background())
 	if err != nil {
-		t.Logf("STARTTLS path error (expected if server doesn't support STARTTLS): %v", err)
-		return
+		t.Skipf("Skipping STARTTLS test (failed to exercise STARTTLS path): %v", err)
 	}
 
 	if s.EntityCertificate == (CertificateInfo{}) {
