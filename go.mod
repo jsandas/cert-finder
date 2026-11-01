@@ -7,4 +7,4 @@ require (
 	github.com/jsandas/tls-simulator v1.0.2
 )
 
-require golang.org/x/crypto v0.57.0
+require golang.org/x/crypto v0.58.0
